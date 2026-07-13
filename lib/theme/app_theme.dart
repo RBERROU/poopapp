@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 class AppTheme {
   static const Color primary = Color(0xFF7C4DFF); // violet fun
   static const Color accent = Color(0xFF00E5A0); // vert menthe
-  static const Color background = Color(0xFF14121A);
+  static const Color background = Color(0xFF0D1B3E);
   static const Color surface = Color(0xFF1F1B2E);
 
   static ThemeData get dark {
