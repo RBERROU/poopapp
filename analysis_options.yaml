@@ -1,0 +1,7 @@
+include: package:flutter_lints/flutter.yaml
+
+# Règles de style supplémentaires (facultatif).
+linter:
+  rules:
+    prefer_const_constructors: true
+    prefer_final_locals: true

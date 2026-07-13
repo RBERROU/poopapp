@@ -1,0 +1,71 @@
+import 'package:flutter/material.dart';
+import 'screens/collection_screen.dart';
+import 'screens/home_screen.dart';
+import 'services/storage_service.dart';
+import 'state/recordings_repository.dart';
+import 'theme/app_theme.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final repository = RecordingsRepository(StorageService());
+  await repository.load();
+  runApp(PootApp(repository: repository));
+}
+
+class PootApp extends StatelessWidget {
+  const PootApp({super.key, required this.repository});
+  final RecordingsRepository repository;
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Poot',
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.dark,
+      home: RootScaffold(repository: repository),
+    );
+  }
+}
+
+/// Coquille principale avec la navigation par onglets.
+/// IndexedStack garde les deux écrans vivants (un enregistrement en cours
+/// n'est pas perdu si on change d'onglet).
+class RootScaffold extends StatefulWidget {
+  const RootScaffold({super.key, required this.repository});
+  final RecordingsRepository repository;
+
+  @override
+  State<RootScaffold> createState() => _RootScaffoldState();
+}
+
+class _RootScaffoldState extends State<RootScaffold> {
+  int _index = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(_index == 0 ? 'Poot' : 'Ma collection')),
+      body: IndexedStack(
+        index: _index,
+        children: [
+          HomeScreen(repository: widget.repository),
+          CollectionScreen(repository: widget.repository),
+        ],
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _index,
+        onDestinationSelected: (i) => setState(() => _index = i),
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.mic_rounded),
+            label: 'Enregistrer',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.library_music_rounded),
+            label: 'Collection',
+          ),
+        ],
+      ),
+    );
+  }
+}
