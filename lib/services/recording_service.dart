@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:uuid/uuid.dart';
@@ -16,9 +17,14 @@ class RecordingService {
 
   /// Démarre l'enregistrement dans le dossier documents de l'app.
   /// Renvoie le chemin du fichier créé.
+  /// Sur le web, il n'y a pas de système de fichiers : `record` ignore le
+  /// chemin fourni et renvoie une blob URL directement au `stop()`.
   Future<String> start() async {
-    final dir = await getApplicationDocumentsDirectory();
-    final path = '${dir.path}/pet_${_uuid.v4()}.m4a';
+    var path = '';
+    if (!kIsWeb) {
+      final dir = await getApplicationDocumentsDirectory();
+      path = '${dir.path}/pet_${_uuid.v4()}.m4a';
+    }
     await _recorder.start(
       const RecordConfig(encoder: AudioEncoder.aacLc),
       path: path,
