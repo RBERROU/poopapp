@@ -1,15 +1,11 @@
 # Configuration de build Netlify pour Poot (Flutter web)
-# Netlify n'a pas Flutter par defaut : on le clone une premiere fois, puis on
-# reutilise le dossier mis en cache par netlify-plugin-cache pour les builds suivants.
+# Netlify n'a pas Flutter par defaut : on le clone puis on build la version web.
+# (Le cache du SDK Flutter entre builds via netlify-plugin-cache a ete tente puis
+# abandonne : le plugin ne restaurait qu'une fraction des fichiers du clone,
+# cassant la compilation. On reclone a chaque fois, plus lent mais fiable.)
 [build]
   publish = "build/web"
-  command = "if [ -d flutter/.git ]; then (cd flutter && git pull); else rm -rf flutter && git clone https://github.com/flutter/flutter.git --depth 1 -b stable; fi && export PATH=$PATH:$PWD/flutter/bin && flutter pub get && flutter build web --release"
-
-[[plugins]]
-  package = "netlify-plugin-cache"
-
-  [plugins.inputs]
-    paths = ["flutter"]
+  command = "rm -rf flutter && git clone https://github.com/flutter/flutter.git --depth 1 -b stable && export PATH=$PATH:$PWD/flutter/bin && flutter pub get && flutter build web --release"
 
 # Redirige toutes les routes vers index.html (necessaire pour une app web mono-page / PWA)
 [[redirects]]
