@@ -60,12 +60,28 @@ class RecordingTile extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 2),
-                Text(
-                  '$date · ${recording.durationLabel}',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.6),
-                    fontSize: 12,
-                  ),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        '$date · ${recording.durationLabel}',
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.6),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                    if (recording.hasLocation)
+                      const Padding(
+                        padding: EdgeInsets.only(left: 4),
+                        child: Icon(
+                          Icons.location_on,
+                          size: 12,
+                          color: Colors.white54,
+                        ),
+                      ),
+                  ],
                 ),
               ],
             ),

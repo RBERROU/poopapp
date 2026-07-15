@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../models/fart_recording.dart';
+import '../services/location_service.dart';
 import '../services/recording_service.dart';
 import '../state/recordings_repository.dart';
 import '../widgets/record_button.dart';
@@ -17,12 +18,14 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final RecordingService _rec = RecordingService();
+  final LocationService _location = LocationService();
   final Uuid _uuid = const Uuid();
 
   bool _isRecording = false;
   bool _busy = false;
   Duration _elapsed = Duration.zero;
   Timer? _timer;
+  Future<({double latitude, double longitude})?>? _pendingLocation;
 
   @override
   void dispose() {
@@ -51,6 +54,7 @@ class _HomeScreenState extends State<HomeScreen> {
           return;
         }
         await _rec.start();
+        _pendingLocation = _location.getCurrentPosition();
         setState(() {
           _isRecording = true;
           _elapsed = Duration.zero;
@@ -72,6 +76,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _saveRecording(String path, int durationMs) async {
+    final location = await _pendingLocation;
+    _pendingLocation = null;
     final number = widget.repository.items.length + 1;
     final rec = FartRecording(
       id: _uuid.v4(),
@@ -79,6 +85,8 @@ class _HomeScreenState extends State<HomeScreen> {
       filePath: path,
       createdAt: DateTime.now(),
       durationMs: durationMs,
+      latitude: location?.latitude,
+      longitude: location?.longitude,
     );
     await widget.repository.add(rec);
     _snack('Enregistré ! Direction ta collection.');

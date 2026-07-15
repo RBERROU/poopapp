@@ -9,6 +9,8 @@ class FartRecording {
   final String filePath;
   final DateTime createdAt;
   final int durationMs;
+  final double? latitude;
+  final double? longitude;
 
   FartRecording({
     required this.id,
@@ -16,7 +18,11 @@ class FartRecording {
     required this.filePath,
     required this.createdAt,
     required this.durationMs,
+    this.latitude,
+    this.longitude,
   });
+
+  bool get hasLocation => latitude != null && longitude != null;
 
   FartRecording copyWith({String? name}) => FartRecording(
         id: id,
@@ -24,6 +30,8 @@ class FartRecording {
         filePath: filePath,
         createdAt: createdAt,
         durationMs: durationMs,
+        latitude: latitude,
+        longitude: longitude,
       );
 
   Map<String, dynamic> toMap() => {
@@ -32,6 +40,8 @@ class FartRecording {
         'filePath': filePath,
         'createdAt': createdAt.millisecondsSinceEpoch,
         'durationMs': durationMs,
+        'latitude': latitude,
+        'longitude': longitude,
       };
 
   factory FartRecording.fromMap(Map<String, dynamic> map) => FartRecording(
@@ -40,6 +50,9 @@ class FartRecording {
         filePath: map['filePath'] as String,
         createdAt: DateTime.fromMillisecondsSinceEpoch(map['createdAt'] as int),
         durationMs: (map['durationMs'] as num).toInt(),
+        // absentes des anciens enregistrements : null, pas de crash
+        latitude: (map['latitude'] as num?)?.toDouble(),
+        longitude: (map['longitude'] as num?)?.toDouble(),
       );
 
   /// Sérialisation de la liste complète (pour SharedPreferences).

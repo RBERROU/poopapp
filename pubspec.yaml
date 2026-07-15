@@ -17,6 +17,9 @@ dependencies:
   share_plus: ^10.0.2     # partage natif (WhatsApp, Insta...)
   uuid: ^4.5.0            # identifiants uniques
   intl: ^0.19.0           # formatage des dates
+  geolocator: ^14.0.2     # géolocalisation (natif + web via geolocator_web)
+  flutter_map: ^8.3.1     # carte OpenStreetMap, sans clé API
+  latlong2: ^0.10.1       # type LatLng utilisé par flutter_map
 
 dev_dependencies:
   flutter_test:

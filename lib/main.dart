@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'screens/collection_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/map_screen.dart';
 import 'services/storage_service.dart';
 import 'state/recordings_repository.dart';
 import 'theme/app_theme.dart';
@@ -43,13 +44,15 @@ class _RootScaffoldState extends State<RootScaffold> {
 
   @override
   Widget build(BuildContext context) {
+    const titles = ['Poot', 'Ma collection', 'Carte'];
     return Scaffold(
-      appBar: AppBar(title: Text(_index == 0 ? 'Poot' : 'Ma collection')),
+      appBar: AppBar(title: Text(titles[_index])),
       body: IndexedStack(
         index: _index,
         children: [
           HomeScreen(repository: widget.repository),
           CollectionScreen(repository: widget.repository),
+          MapScreen(repository: widget.repository),
         ],
       ),
       bottomNavigationBar: NavigationBar(
@@ -63,6 +66,10 @@ class _RootScaffoldState extends State<RootScaffold> {
           NavigationDestination(
             icon: Icon(Icons.library_music_rounded),
             label: 'Collection',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.map_rounded),
+            label: 'Carte',
           ),
         ],
       ),
