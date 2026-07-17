@@ -1,9 +1,4 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
+// Smoke test : l'app démarre et affiche l'onboarding au premier lancement.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -13,20 +8,29 @@ import 'package:justfart/services/storage_service.dart';
 import 'package:justfart/state/recordings_repository.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(JustFartApp(repository: RecordingsRepository(StorageService())));
-
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
-
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
+  testWidgets('Onboarding s\'affiche au premier lancement', (tester) async {
+    final storage = StorageService();
+    await tester.pumpWidget(JustFartApp(
+      repository: RecordingsRepository(storage),
+      storage: storage,
+      onboarded: false,
+    ));
     await tester.pump();
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(find.text('C\'est parti ! 🎉'), findsOneWidget);
+  });
+
+  testWidgets('L\'app principale s\'affiche une fois onboardé', (tester) async {
+    final storage = StorageService();
+    await tester.pumpWidget(JustFartApp(
+      repository: RecordingsRepository(storage),
+      storage: storage,
+      onboarded: true,
+    ));
+    await tester.pump();
+
+    // Le prompt de l'écran d'enregistrement est en 2 couches (contour + fond).
+    expect(find.text('Prêt à péter ?'), findsWidgets);
+    expect(find.text('C\'est parti ! 🎉'), findsNothing);
   });
 }

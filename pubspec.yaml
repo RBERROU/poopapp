@@ -27,6 +27,29 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
+  flutter_launcher_icons: ^0.14.1   # génère les icônes natives + web
+  flutter_native_splash: ^2.4.1     # génère l'écran de démarrage natif
 
 flutter:
   uses-material-design: true
+
+# Icône de l'app (candy-pop, générée via tool/make_icon.py).
+flutter_launcher_icons:
+  image_path: "assets/icon/icon.png"
+  android: true
+  adaptive_icon_background: "#6B2FB5"
+  adaptive_icon_foreground: "assets/icon/icon_foreground.png"
+  ios: true
+  remove_alpha_ios: true
+  web:
+    generate: true
+    background_color: "#6B2FB5"
+    theme_color: "#FF4FA3"
+
+# Écran de démarrage (fond bubble + logo).
+flutter_native_splash:
+  color: "#FF4FA3"
+  image: "assets/icon/icon_foreground.png"
+  android_12:
+    color: "#FF4FA3"
+    image: "assets/icon/icon_foreground.png"

@@ -5,6 +5,18 @@ import '../models/fart_recording.dart';
 /// Les fichiers audio restent dans le dossier documents de l'app.
 class StorageService {
   static const String _key = 'justfart_recordings_v1';
+  static const String _onboardedKey = 'justfart_onboarded_v1';
+
+  /// true si l'utilisateur a déjà passé l'écran d'accueil.
+  Future<bool> hasOnboarded() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_onboardedKey) ?? false;
+  }
+
+  Future<void> setOnboarded() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_onboardedKey, true);
+  }
 
   Future<List<FartRecording>> load() async {
     final prefs = await SharedPreferences.getInstance();

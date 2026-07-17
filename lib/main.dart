@@ -5,6 +5,7 @@ import 'screens/collection_screen.dart';
 import 'screens/feed_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/map_screen.dart';
+import 'screens/onboarding_screen.dart';
 import 'services/auth_service.dart';
 import 'services/cloud_service.dart';
 import 'services/storage_service.dart';
@@ -28,15 +29,45 @@ Future<void> main() async {
     debugPrint('Supabase indisponible, mode local : $e');
   }
 
-  final repository = RecordingsRepository(StorageService(), cloud);
+  final storage = StorageService();
+  final repository = RecordingsRepository(storage, cloud);
   await repository.load();
-  runApp(JustFartApp(repository: repository, cloud: cloud));
+  final onboarded = await storage.hasOnboarded();
+  runApp(JustFartApp(
+    repository: repository,
+    cloud: cloud,
+    storage: storage,
+    onboarded: onboarded,
+  ));
 }
 
-class JustFartApp extends StatelessWidget {
-  const JustFartApp({super.key, required this.repository, this.cloud});
+class JustFartApp extends StatefulWidget {
+  const JustFartApp({
+    super.key,
+    required this.repository,
+    required this.storage,
+    required this.onboarded,
+    this.cloud,
+  });
   final RecordingsRepository repository;
+  final StorageService storage;
+  final bool onboarded;
   final CloudService? cloud;
+
+  @override
+  State<JustFartApp> createState() => _JustFartAppState();
+}
+
+class _JustFartAppState extends State<JustFartApp> {
+  late bool _onboarded = widget.onboarded;
+
+  Future<void> _finishOnboarding(String pseudo) async {
+    await widget.storage.setOnboarded();
+    if (pseudo.isNotEmpty) {
+      await widget.cloud?.updatePseudo(pseudo);
+    }
+    if (mounted) setState(() => _onboarded = true);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -44,7 +75,9 @@ class JustFartApp extends StatelessWidget {
       title: 'Just Fart',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.theme,
-      home: RootScaffold(repository: repository, cloud: cloud),
+      home: _onboarded
+          ? RootScaffold(repository: widget.repository, cloud: widget.cloud)
+          : OnboardingScreen(onDone: _finishOnboarding),
     );
   }
 }
