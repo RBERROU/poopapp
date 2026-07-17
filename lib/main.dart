@@ -10,17 +10,17 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final repository = RecordingsRepository(StorageService());
   await repository.load();
-  runApp(PootApp(repository: repository));
+  runApp(JustFartApp(repository: repository));
 }
 
-class PootApp extends StatelessWidget {
-  const PootApp({super.key, required this.repository});
+class JustFartApp extends StatelessWidget {
+  const JustFartApp({super.key, required this.repository});
   final RecordingsRepository repository;
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Poot',
+      title: 'Just Fart',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
       home: RootScaffold(repository: repository),
@@ -44,7 +44,7 @@ class _RootScaffoldState extends State<RootScaffold> {
 
   @override
   Widget build(BuildContext context) {
-    const titles = ['Poot', 'Ma collection', 'Carte'];
+    const titles = ['Just Fart', 'Ma collection', 'Carte'];
     return Scaffold(
       appBar: AppBar(title: Text(titles[_index])),
       body: IndexedStack(

@@ -4,7 +4,7 @@ import '../models/fart_recording.dart';
 /// Persiste la liste des enregistrements (uniquement les métadonnées).
 /// Les fichiers audio restent dans le dossier documents de l'app.
 class StorageService {
-  static const String _key = 'poot_recordings_v1';
+  static const String _key = 'justfart_recordings_v1';
 
   Future<List<FartRecording>> load() async {
     final prefs = await SharedPreferences.getInstance();

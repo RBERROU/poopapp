@@ -1,4 +1,4 @@
-# Configuration de build Netlify pour Poot (Flutter web)
+# Configuration de build Netlify pour Just Fart (Flutter web)
 # Netlify n'a pas Flutter par defaut : on le clone puis on build la version web.
 # (Le cache du SDK Flutter entre builds via netlify-plugin-cache a ete tente puis
 # abandonne : le plugin ne restaurait qu'une fraction des fichiers du clone,

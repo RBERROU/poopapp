@@ -1,4 +1,4 @@
-package com.example.poot
+package com.justfart.app
 
 import io.flutter.embedding.android.FlutterActivity
 

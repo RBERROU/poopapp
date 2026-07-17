@@ -44,7 +44,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
   Future<void> _share(String path, String name) async {
     await Share.shareXFiles(
       [XFile(path)],
-      text: '$name — envoyé depuis Poot',
+      text: '$name — envoyé depuis Just Fart',
     );
   }
 

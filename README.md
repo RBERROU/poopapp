@@ -1,4 +1,4 @@
-# Poot — MVP v0
+# Just Fart — MVP v0
 
 Application mobile (Flutter) pour **enregistrer, collectionner et partager tes pets**.
 Ce dossier contient le code source du premier MVP : 100 % local, aucun serveur, donc 0 € d'infrastructure.
@@ -26,15 +26,15 @@ Flutter génère lui-même les dossiers de plateforme (`android/`, `ios/`…). L
 
 ### Option A — dans ce dossier directement (le plus simple)
 
-1. Ouvre un terminal dans ce dossier `poot-app/`.
+1. Ouvre un terminal dans ce dossier.
 2. Lance : `flutter create .`
    *(génère `android/`, `ios/`… sans écraser `lib/` ni `pubspec.yaml`)*
 
 ### Option B — projet neuf puis copie
 
-1. `flutter create poot`
-2. Remplace `poot/pubspec.yaml` par celui fourni.
-3. Remplace le dossier `poot/lib/` par le `lib/` fourni.
+1. `flutter create justfart`
+2. Remplace `justfart/pubspec.yaml` par celui fourni.
+3. Remplace le dossier `justfart/lib/` par le `lib/` fourni.
 
 ---
 
@@ -48,7 +48,7 @@ Flutter génère lui-même les dossiers de plateforme (`android/`, `ios/`…). L
 
 - **Android** — dans `android/app/build.gradle`, mets `minSdk 23` (requis par le module d'enregistrement).
 
-- **iOS** (plus tard, nécessite un Mac) — dans `ios/Runner/Info.plist`, ajoute la clé `NSMicrophoneUsageDescription` avec un texte du type : « Poot a besoin du micro pour enregistrer tes pets. »
+- **iOS** (plus tard, nécessite un Mac) — dans `ios/Runner/Info.plist`, ajoute la clé `NSMicrophoneUsageDescription` avec un texte du type : « Just Fart a besoin du micro pour enregistrer tes pets. »
 
 ---
 
@@ -63,7 +63,7 @@ Flutter génère lui-même les dossiers de plateforme (`android/`, `ios/`…). L
 ## Renommer l'app
 
 - **Nom affiché** : `title:` dans `lib/main.dart`, et `name:` / `description:` dans `pubspec.yaml`.
-- **Identifiant de package** (`com.tonnom.poot`) : régénère avec `flutter create --org com.tonnom .`
+- **Identifiant de package** (`com.tonnom.justfart`) : régénère avec `flutter create --org com.tonnom .`
 - **Icône** : à ajouter plus tard via le package `flutter_launcher_icons`.
 
 ---

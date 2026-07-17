@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "poot" "\0"
+            VALUE "CompanyName", "com.justfart" "\0"
+            VALUE "FileDescription", "Just Fart" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "poot" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
-            VALUE "OriginalFilename", "poot.exe" "\0"
-            VALUE "ProductName", "poot" "\0"
+            VALUE "InternalName", "justfart" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 com.justfart. All rights reserved." "\0"
+            VALUE "OriginalFilename", "justfart.exe" "\0"
+            VALUE "ProductName", "Just Fart" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END
