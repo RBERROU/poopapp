@@ -1,6 +1,5 @@
 // Smoke test : l'app démarre et affiche l'onboarding au premier lancement.
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:justfart/main.dart';

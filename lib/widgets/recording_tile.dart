@@ -16,6 +16,7 @@ class RecordingTile extends StatelessWidget {
     required this.onShare,
     required this.onRename,
     required this.onDelete,
+    this.onSendToFriend,
   });
 
   final FartRecording recording;
@@ -25,6 +26,9 @@ class RecordingTile extends StatelessWidget {
   final VoidCallback onShare;
   final VoidCallback onRename;
   final VoidCallback onDelete;
+
+  /// null si le backend est indisponible (pas d'envoi possible).
+  final VoidCallback? onSendToFriend;
 
   // Trio de fonds pastel + couleur du bouton play, en rotation.
   static const _cardColors = [
@@ -110,18 +114,21 @@ class RecordingTile extends StatelessWidget {
               ],
             ),
           ),
-          IconButton(
-            onPressed: onShare,
-            icon: const Icon(Icons.ios_share_rounded, color: AppTheme.ink),
-            tooltip: 'Partager',
-          ),
+          if (onSendToFriend != null)
+            IconButton(
+              onPressed: onSendToFriend,
+              icon: const Icon(Icons.send_rounded, color: AppTheme.bubble),
+              tooltip: 'Envoyer à un ami',
+            ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_horiz_rounded, color: AppTheme.ink),
             onSelected: (v) {
+              if (v == 'share') onShare();
               if (v == 'rename') onRename();
               if (v == 'delete') onDelete();
             },
             itemBuilder: (_) => const [
+              PopupMenuItem(value: 'share', child: Text('Partager (fichier)')),
               PopupMenuItem(value: 'rename', child: Text('Renommer')),
               PopupMenuItem(value: 'delete', child: Text('Supprimer')),
             ],

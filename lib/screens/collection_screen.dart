@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import '../models/fart_recording.dart';
+import '../services/cloud_service.dart';
 import '../services/player_service.dart';
 import '../state/recordings_repository.dart';
 import '../theme/app_theme.dart';
 import '../widgets/recording_tile.dart';
+import '../widgets/send_to_friend_sheet.dart';
 
-/// Onglet "Collection" : liste, lecture, partage, renommage, suppression.
+/// Onglet "Collection" : liste, lecture, envoi privé, partage, renommage, suppression.
 class CollectionScreen extends StatefulWidget {
-  const CollectionScreen({super.key, required this.repository});
+  const CollectionScreen({super.key, required this.repository, this.cloud});
   final RecordingsRepository repository;
+  final CloudService? cloud;
 
   @override
   State<CollectionScreen> createState() => _CollectionScreenState();
@@ -41,6 +44,24 @@ class _CollectionScreenState extends State<CollectionScreen> {
       await _player.play(rec);
       setState(() => _playingId = rec.id);
     }
+  }
+
+  Future<void> _sendToFriend(FartRecording rec) async {
+    final cloud = widget.cloud;
+    if (cloud == null) return;
+    await showSendToFriendSheet(
+      context,
+      cloud: cloud,
+      recording: rec,
+      onResult: _snack,
+    );
+  }
+
+  void _snack(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(msg)));
   }
 
   Future<void> _share(FartRecording rec) async {
@@ -156,6 +177,8 @@ class _CollectionScreenState extends State<CollectionScreen> {
               isPlaying: _playingId == r.id,
               onPlay: () => _play(r),
               onShare: () => _share(r),
+              onSendToFriend:
+                  widget.cloud == null ? null : () => _sendToFriend(r),
               onRename: () => _rename(r.id, r.name),
               onDelete: () => _confirmDelete(r.id),
             );

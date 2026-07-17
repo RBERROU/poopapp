@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/fart_recording.dart';
 import '../models/feed_item.dart';
+import '../models/social.dart';
 
 /// Accès au backend Supabase : upload des fichiers audio vers le bucket
 /// `farts` et métadonnées dans la table `farts`.
@@ -25,6 +26,14 @@ class CloudService {
 
   String publicUrlFor(String audioPath) =>
       _client.storage.from(_bucket).getPublicUrl(audioPath);
+
+  /// Chemin de stockage ({uid}/{id}.ext) déduit d'une URL publique, ou null.
+  String? storagePathFromUrl(String url) {
+    const marker = '/object/public/$_bucket/';
+    final i = url.indexOf(marker);
+    if (i == -1) return null;
+    return Uri.decodeComponent(url.substring(i + marker.length));
+  }
 
   /// Upload l'audio + la ligne de métadonnées. Renvoie l'URL publique,
   /// ou null si l'upload a échoué (offline, fichier disparu…).
@@ -88,10 +97,8 @@ class CloudService {
       await _client.from('farts').delete().eq('id', rec.id);
       final url = rec.audioUrl;
       if (url != null) {
-        const marker = '/object/public/$_bucket/';
-        final i = url.indexOf(marker);
-        if (i != -1) {
-          final path = Uri.decodeComponent(url.substring(i + marker.length));
+        final path = storagePathFromUrl(url);
+        if (path != null) {
           await _client.storage.from(_bucket).remove([path]);
         }
       }
@@ -226,6 +233,237 @@ class CloudService {
       await _client.from('profiles').update({'pseudo': pseudo}).eq('id', uid);
     } catch (e) {
       debugPrint('Mise à jour du pseudo impossible : $e');
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Amis : code, demandes, liste.
+  // ---------------------------------------------------------------------------
+
+  /// Mon profil : { pseudo, friend_code }.
+  Future<({String pseudo, String code})?> fetchMyProfile() async {
+    final uid = userId;
+    if (uid == null) return null;
+    try {
+      final row = await _client
+          .from('profiles')
+          .select('pseudo, friend_code')
+          .eq('id', uid)
+          .maybeSingle();
+      if (row == null) return null;
+      return (
+        pseudo: (row['pseudo'] as String?) ?? 'Péteur anonyme',
+        code: (row['friend_code'] as String?) ?? '',
+      );
+    } catch (e) {
+      debugPrint('Lecture de mon profil impossible : $e');
+      return null;
+    }
+  }
+
+  /// Cherche un utilisateur par son code ami. Renvoie (id, pseudo) ou null.
+  Future<({String id, String pseudo})?> findByCode(String code) async {
+    try {
+      final row = await _client
+          .from('profiles')
+          .select('id, pseudo')
+          .eq('friend_code', code.trim().toUpperCase())
+          .maybeSingle();
+      if (row == null) return null;
+      return (id: row['id'] as String, pseudo: row['pseudo'] as String);
+    } catch (e) {
+      debugPrint('Recherche par code impossible : $e');
+      return null;
+    }
+  }
+
+  /// Envoie une demande d'ami. Renvoie un message d'état pour l'UI.
+  Future<String> sendFriendRequest(String targetId) async {
+    final uid = userId;
+    if (uid == null) return 'Connexion requise.';
+    if (targetId == uid) return 'C\'est toi, ça ! 😅';
+    try {
+      await _client.from('friendships').insert({
+        'requester_id': uid,
+        'addressee_id': targetId,
+      });
+      return 'Demande envoyée ! 🤝';
+    } on PostgrestException catch (e) {
+      // 23505 = doublon (relation déjà existante dans ce sens).
+      if (e.code == '23505') return 'Demande déjà envoyée.';
+      debugPrint('Demande d\'ami impossible : $e');
+      return 'Impossible d\'envoyer la demande.';
+    } catch (e) {
+      debugPrint('Demande d\'ami impossible : $e');
+      return 'Impossible d\'envoyer la demande.';
+    }
+  }
+
+  /// Demandes d'amis reçues (en attente).
+  Future<List<FriendRequest>> fetchIncomingRequests() async {
+    final uid = userId;
+    if (uid == null) return [];
+    try {
+      final rows = await _client
+          .from('friendships')
+          .select('id, requester_id')
+          .eq('addressee_id', uid)
+          .eq('status', 'pending');
+      final list = List<Map<String, dynamic>>.from(rows);
+      final pseudos =
+          await _pseudosFor([for (final r in list) r['requester_id'] as String]);
+      return [
+        for (final r in list)
+          FriendRequest(
+            friendshipId: r['id'] as String,
+            userId: r['requester_id'] as String,
+            pseudo: pseudos[r['requester_id']] ?? 'Péteur anonyme',
+          ),
+      ];
+    } catch (e) {
+      debugPrint('Chargement des demandes impossible : $e');
+      return [];
+    }
+  }
+
+  Future<void> respondToRequest(String friendshipId, {required bool accept}) async {
+    try {
+      if (accept) {
+        await _client
+            .from('friendships')
+            .update({'status': 'accepted'}).eq('id', friendshipId);
+      } else {
+        await _client.from('friendships').delete().eq('id', friendshipId);
+      }
+    } catch (e) {
+      debugPrint('Réponse à la demande impossible : $e');
+    }
+  }
+
+  /// Liste des amis acceptés (dans les deux sens).
+  Future<List<Friend>> fetchFriends() async {
+    final uid = userId;
+    if (uid == null) return [];
+    try {
+      final rows = await _client
+          .from('friendships')
+          .select('requester_id, addressee_id')
+          .eq('status', 'accepted')
+          .or('requester_id.eq.$uid,addressee_id.eq.$uid');
+      final list = List<Map<String, dynamic>>.from(rows);
+      final otherIds = [
+        for (final r in list)
+          (r['requester_id'] as String) == uid
+              ? r['addressee_id'] as String
+              : r['requester_id'] as String,
+      ];
+      final pseudos = await _pseudosFor(otherIds);
+      return [
+        for (final id in otherIds)
+          Friend(userId: id, pseudo: pseudos[id] ?? 'Péteur anonyme'),
+      ];
+    } catch (e) {
+      debugPrint('Chargement des amis impossible : $e');
+      return [];
+    }
+  }
+
+  Future<Map<String, String>> _pseudosFor(List<String> ids) async {
+    if (ids.isEmpty) return {};
+    final rows = await _client
+        .from('profiles')
+        .select('id, pseudo')
+        .inFilter('id', ids);
+    return {
+      for (final r in List<Map<String, dynamic>>.from(rows))
+        r['id'] as String: (r['pseudo'] as String?) ?? 'Péteur anonyme',
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Envois privés (DM) + boîte de réception.
+  // ---------------------------------------------------------------------------
+
+  /// Envoie un pet en privé à un ami. Renvoie true si envoyé.
+  Future<bool> sendFartToFriend(String recipientId, FartRecording rec) async {
+    final uid = userId;
+    if (uid == null) return false;
+    final url = rec.audioUrl;
+    final path = url == null ? null : storagePathFromUrl(url);
+    if (path == null) return false; // pas encore synchronisé sur le cloud
+    try {
+      await _client.from('direct_sends').insert({
+        'sender_id': uid,
+        'recipient_id': recipientId,
+        'fart_id': rec.id,
+        'name': rec.name,
+        'duration_ms': rec.durationMs,
+        'audio_path': path,
+      });
+      return true;
+    } catch (e) {
+      debugPrint('Envoi privé impossible : $e');
+      return false;
+    }
+  }
+
+  /// Pets reçus (les plus récents d'abord).
+  Future<List<InboxItem>> fetchInbox() async {
+    final uid = userId;
+    if (uid == null) return [];
+    try {
+      final rows = await _client
+          .from('direct_sends')
+          .select()
+          .eq('recipient_id', uid)
+          .order('created_at', ascending: false);
+      final list = List<Map<String, dynamic>>.from(rows);
+      final pseudos =
+          await _pseudosFor([for (final r in list) r['sender_id'] as String]);
+      return [
+        for (final r in list)
+          InboxItem(
+            id: r['id'] as String,
+            senderId: r['sender_id'] as String,
+            senderPseudo: pseudos[r['sender_id']] ?? 'Péteur anonyme',
+            name: r['name'] as String,
+            durationMs: (r['duration_ms'] as num).toInt(),
+            audioUrl: publicUrlFor(r['audio_path'] as String),
+            createdAt: DateTime.parse(r['created_at'] as String).toLocal(),
+            seen: r['seen_at'] != null,
+          ),
+      ];
+    } catch (e) {
+      debugPrint('Chargement de la boîte de réception impossible : $e');
+      return [];
+    }
+  }
+
+  /// Nombre de pets reçus non lus (pour le badge de nav).
+  Future<int> countUnseen() async {
+    final uid = userId;
+    if (uid == null) return 0;
+    try {
+      final rows = await _client
+          .from('direct_sends')
+          .select('id')
+          .eq('recipient_id', uid)
+          .isFilter('seen_at', null);
+      return List.from(rows).length;
+    } catch (e) {
+      debugPrint('Comptage des non-lus impossible : $e');
+      return 0;
+    }
+  }
+
+  Future<void> markSeen(String sendId) async {
+    try {
+      await _client
+          .from('direct_sends')
+          .update({'seen_at': DateTime.now().toUtc().toIso8601String()})
+          .eq('id', sendId);
+    } catch (e) {
+      debugPrint('Marquage lu impossible : $e');
     }
   }
 

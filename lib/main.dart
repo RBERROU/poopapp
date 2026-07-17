@@ -3,7 +3,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'config/supabase_config.dart';
 import 'screens/collection_screen.dart';
 import 'screens/feed_screen.dart';
+import 'screens/friends_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/inbox_screen.dart';
 import 'screens/map_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'services/auth_service.dart';
@@ -11,7 +13,6 @@ import 'services/cloud_service.dart';
 import 'services/storage_service.dart';
 import 'state/recordings_repository.dart';
 import 'theme/app_theme.dart';
-import 'widgets/pseudo_dialog.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -96,29 +97,53 @@ class RootScaffold extends StatefulWidget {
 
 class _RootScaffoldState extends State<RootScaffold> {
   int _index = 0;
+  int _unseen = 0;
+  final _inboxKey = GlobalKey<InboxScreenState>();
 
-  static const _titles = ['Just Fart', 'Le monde', 'Ma collection', 'Carte'];
+  static const _inboxIndex = 2;
+  static const _titles = [
+    'Just Fart',
+    'Le monde',
+    'Reçus',
+    'Ma collection',
+    'Carte',
+  ];
   static const _tabs = [
     (emoji: '🎙️', label: 'Enregistrer'),
     (emoji: '🌍', label: 'Le monde'),
+    (emoji: '📬', label: 'Reçus'),
     (emoji: '💿', label: 'Collection'),
     (emoji: '🗺️', label: 'Carte'),
   ];
 
-  Future<void> _editPseudo() async {
+  @override
+  void initState() {
+    super.initState();
+    _refreshUnseen();
+  }
+
+  Future<void> _refreshUnseen() async {
     final cloud = widget.cloud;
     if (cloud == null) return;
-    final current = await cloud.fetchMyPseudo();
-    if (!mounted) return;
-    final next = await showPseudoDialog(context, current: current ?? '');
-    if (next != null && next.isNotEmpty) {
-      await cloud.updatePseudo(next);
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(SnackBar(content: Text('Pseudo : $next 🎉')));
-      }
+    final n = await cloud.countUnseen();
+    if (mounted) setState(() => _unseen = n);
+  }
+
+  void _onSelect(int i) {
+    setState(() => _index = i);
+    if (i == _inboxIndex) {
+      _inboxKey.currentState?.load();
     }
+    _refreshUnseen();
+  }
+
+  Future<void> _openProfile() async {
+    final cloud = widget.cloud;
+    if (cloud == null) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => FriendsScreen(cloud: cloud)),
+    );
+    _refreshUnseen();
   }
 
   @override
@@ -133,8 +158,8 @@ class _RootScaffoldState extends State<RootScaffold> {
         actions: [
           if (widget.cloud != null)
             IconButton(
-              tooltip: 'Mon pseudo',
-              onPressed: _editPseudo,
+              tooltip: 'Profil & amis',
+              onPressed: _openProfile,
               icon: Icon(Icons.account_circle_rounded, color: fg),
             ),
         ],
@@ -144,14 +169,22 @@ class _RootScaffoldState extends State<RootScaffold> {
         children: [
           HomeScreen(repository: widget.repository),
           FeedScreen(cloud: widget.cloud),
-          CollectionScreen(repository: widget.repository),
+          InboxScreen(
+            key: _inboxKey,
+            cloud: widget.cloud,
+            onChanged: _refreshUnseen,
+          ),
+          CollectionScreen(
+              repository: widget.repository, cloud: widget.cloud),
           MapScreen(repository: widget.repository, cloud: widget.cloud),
         ],
       ),
       bottomNavigationBar: _PopNavBar(
         index: _index,
         tabs: _tabs,
-        onSelected: (i) => setState(() => _index = i),
+        badgeIndex: _inboxIndex,
+        badgeCount: _unseen,
+        onSelected: _onSelect,
       ),
     );
   }
@@ -164,11 +197,15 @@ class _PopNavBar extends StatelessWidget {
     required this.index,
     required this.tabs,
     required this.onSelected,
+    this.badgeIndex = -1,
+    this.badgeCount = 0,
   });
 
   final int index;
   final List<({String emoji, String label})> tabs;
   final ValueChanged<int> onSelected;
+  final int badgeIndex;
+  final int badgeCount;
 
   @override
   Widget build(BuildContext context) {
@@ -180,7 +217,7 @@ class _PopNavBar extends StatelessWidget {
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
@@ -189,6 +226,7 @@ class _PopNavBar extends StatelessWidget {
                   emoji: tabs[i].emoji,
                   label: tabs[i].label,
                   active: i == index,
+                  badge: i == badgeIndex ? badgeCount : 0,
                   onTap: () => onSelected(i),
                 ),
             ],
@@ -205,11 +243,13 @@ class _NavItem extends StatelessWidget {
     required this.label,
     required this.active,
     required this.onTap,
+    this.badge = 0,
   });
 
   final String emoji;
   final String label;
   final bool active;
+  final int badge;
   final VoidCallback onTap;
 
   @override
@@ -221,7 +261,7 @@ class _NavItem extends StatelessWidget {
         duration: const Duration(milliseconds: 180),
         curve: Curves.easeOut,
         padding: EdgeInsets.symmetric(
-          horizontal: active ? 16 : 12,
+          horizontal: active ? 14 : 10,
           vertical: 8,
         ),
         decoration: active
@@ -230,12 +270,41 @@ class _NavItem extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              emoji,
-              style: TextStyle(
-                fontSize: 24,
-                color: active ? null : AppTheme.ink.withValues(alpha: 0.45),
-              ),
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Text(
+                  emoji,
+                  style: TextStyle(
+                    fontSize: 24,
+                    color: active ? null : AppTheme.ink.withValues(alpha: 0.45),
+                  ),
+                ),
+                if (badge > 0)
+                  Positioned(
+                    top: -6,
+                    right: -8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 5, vertical: 1),
+                      constraints: const BoxConstraints(minWidth: 18),
+                      decoration: BoxDecoration(
+                        color: AppTheme.bubble,
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(color: AppTheme.ink, width: 2),
+                      ),
+                      child: Text(
+                        badge > 9 ? '9+' : '$badge',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
             if (active) ...[
               const SizedBox(width: 8),
