@@ -3,6 +3,7 @@ import 'package:share_plus/share_plus.dart';
 import '../models/fart_recording.dart';
 import '../services/player_service.dart';
 import '../state/recordings_repository.dart';
+import '../theme/app_theme.dart';
 import '../widgets/recording_tile.dart';
 
 /// Onglet "Collection" : liste, lecture, partage, renommage, suppression.
@@ -113,14 +114,33 @@ class _CollectionScreenState extends State<CollectionScreen> {
       builder: (context, _) {
         final items = widget.repository.items;
         if (items.isEmpty) {
-          return const Center(
+          return Center(
             child: Padding(
-              padding: EdgeInsets.all(32),
-              child: Text(
-                "Aucun pet pour l'instant.\n"
-                'Va dans l\'onglet Enregistrer pour créer le premier !',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 16, color: Colors.white70),
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('💨', style: TextStyle(fontSize: 64)),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Aucun pet pour l\'instant',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                      color: AppTheme.ink,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Va dans l\'onglet Enregistrer\npour créer le premier !',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.ink.withValues(alpha: 0.6),
+                    ),
+                  ),
+                ],
               ),
             ),
           );
@@ -132,6 +152,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
             final r = items[i];
             return RecordingTile(
               recording: r,
+              index: i,
               isPlaying: _playingId == r.id,
               onPlay: () => _play(r),
               onShare: () => _share(r),

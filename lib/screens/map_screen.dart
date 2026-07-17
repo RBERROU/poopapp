@@ -5,6 +5,7 @@ import 'package:latlong2/latlong.dart';
 import '../models/fart_recording.dart';
 import '../services/player_service.dart';
 import '../state/recordings_repository.dart';
+import '../theme/app_theme.dart';
 
 /// Onglet "Carte" : affiche tous les pets géolocalisés sur une carte OpenStreetMap.
 class MapScreen extends StatefulWidget {
@@ -27,26 +28,61 @@ class _MapScreenState extends State<MapScreen> {
   void _showDetails(FartRecording r) {
     showModalBottomSheet(
       context: context,
+      backgroundColor: AppTheme.paper,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        side: BorderSide(color: AppTheme.ink, width: AppTheme.stroke),
+      ),
       builder: (ctx) => Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               r.name,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w900,
+                color: AppTheme.ink,
+              ),
             ),
             const SizedBox(height: 4),
             Text(
               '${DateFormat('dd/MM/yy · HH:mm').format(r.createdAt)} · ${r.durationLabel}',
-              style: const TextStyle(color: Colors.white70),
+              style: TextStyle(
+                color: AppTheme.ink.withValues(alpha: 0.6),
+                fontWeight: FontWeight.w700,
+              ),
             ),
-            const SizedBox(height: 12),
-            FilledButton.icon(
-              onPressed: () => _player.play(r),
-              icon: const Icon(Icons.play_arrow_rounded),
-              label: const Text('Écouter'),
+            const SizedBox(height: 16),
+            GestureDetector(
+              onTap: () => _player.play(r),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+                decoration: AppTheme.stickerCard(
+                  color: AppTheme.bubble,
+                  radius: 999,
+                  dx: 3,
+                  dy: 3,
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.play_arrow_rounded, color: Colors.white),
+                    SizedBox(width: 6),
+                    Text(
+                      'Écouter',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ],
         ),
@@ -62,14 +98,33 @@ class _MapScreenState extends State<MapScreen> {
         final located =
             widget.repository.items.where((r) => r.hasLocation).toList();
         if (located.isEmpty) {
-          return const Center(
+          return Center(
             child: Padding(
-              padding: EdgeInsets.all(32),
-              child: Text(
-                "Aucun pet géolocalisé pour l'instant.\n"
-                'Autorise la localisation lors du prochain enregistrement !',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 16, color: Colors.white70),
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('🗺️', style: TextStyle(fontSize: 64)),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Aucun pet géolocalisé',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                      color: AppTheme.ink,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Autorise la localisation lors\ndu prochain enregistrement !',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.ink.withValues(alpha: 0.6),
+                    ),
+                  ),
+                ],
               ),
             ),
           );
@@ -99,14 +154,27 @@ class _MapScreenState extends State<MapScreen> {
                   .map(
                     (r) => Marker(
                       point: LatLng(r.latitude!, r.longitude!),
-                      width: 44,
-                      height: 44,
+                      width: 46,
+                      height: 46,
                       child: GestureDetector(
                         onTap: () => _showDetails(r),
-                        child: const Icon(
-                          Icons.location_on,
-                          color: Colors.redAccent,
-                          size: 40,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: AppTheme.bubble,
+                            border:
+                                Border.all(color: AppTheme.ink, width: 3),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: AppTheme.ink,
+                                offset: Offset(2, 2),
+                                blurRadius: 0,
+                              ),
+                            ],
+                          ),
+                          child: const Center(
+                            child: Text('💨', style: TextStyle(fontSize: 20)),
+                          ),
                         ),
                       ),
                     ),

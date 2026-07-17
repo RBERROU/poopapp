@@ -5,6 +5,7 @@ import '../models/fart_recording.dart';
 import '../services/location_service.dart';
 import '../services/recording_service.dart';
 import '../state/recordings_repository.dart';
+import '../theme/app_theme.dart';
 import '../widgets/record_button.dart';
 
 /// Onglet "Enregistrer" : gros bouton, minuteur, sauvegarde automatique.
@@ -102,32 +103,61 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final seconds = (_elapsed.inMilliseconds / 1000).toStringAsFixed(1);
-    return Center(
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [AppTheme.bubble, AppTheme.bubbleDeep],
+        ),
+      ),
+      child: Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(
-            _isRecording ? 'Enregistrement…' : 'Prêt à péter ?',
-            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
+          OutlinedDisplayText(
+            _isRecording ? 'Ça pète ! 💥' : 'Prêt à péter ?',
+            fontSize: 30,
+            color: Colors.white,
+            strokeWidth: 2.5,
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           SizedBox(
-            height: 28,
-            child: _isRecording
-                ? Text(
-                    '$seconds s',
-                    style: const TextStyle(
-                        fontSize: 18, color: Colors.white70),
-                  )
-                : const Text(
-                    'Appuie sur le bouton pour lancer',
-                    style: TextStyle(fontSize: 14, color: Colors.white54),
-                  ),
+            height: 26,
+            child: Text(
+              _isRecording ? '$seconds s' : "Appuie et lâche l'ambiance",
+              style: TextStyle(
+                fontSize: _isRecording ? 18 : 14,
+                fontWeight: FontWeight.w700,
+                color: Colors.white.withValues(alpha: 0.9),
+              ),
+            ),
           ),
-          const SizedBox(height: 44),
+          const SizedBox(height: 36),
           RecordButton(isRecording: _isRecording, onTap: _toggle),
-          const SizedBox(height: 44),
+          const SizedBox(height: 40),
+          Transform.rotate(
+            angle: 0.035,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+              decoration: AppTheme.stickerCard(
+                color: AppTheme.mint,
+                radius: 999,
+                dx: 3,
+                dy: 3,
+              ),
+              child: Text(
+                _isRecording ? 'Appuie pour arrêter' : 'Maintiens pour enregistrer',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 12,
+                  color: AppTheme.ink,
+                ),
+              ),
+            ),
+          ),
         ],
+      ),
       ),
     );
   }

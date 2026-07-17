@@ -40,7 +40,7 @@ class JustFartApp extends StatelessWidget {
     return MaterialApp(
       title: 'Just Fart',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.dark,
+      theme: AppTheme.theme,
       home: RootScaffold(repository: repository),
     );
   }
@@ -60,11 +60,25 @@ class RootScaffold extends StatefulWidget {
 class _RootScaffoldState extends State<RootScaffold> {
   int _index = 0;
 
+  static const _titles = ['Just Fart', 'Ma collection', 'Carte'];
+  static const _tabs = [
+    (emoji: '🎙️', label: 'Enregistrer'),
+    (emoji: '💿', label: 'Collection'),
+    (emoji: '🗺️', label: 'Carte'),
+  ];
+
   @override
   Widget build(BuildContext context) {
-    const titles = ['Just Fart', 'Ma collection', 'Carte'];
+    // Onglet 0 (Enregistrer) : fond rose plein, texte blanc.
+    final onBubble = _index == 0;
     return Scaffold(
-      appBar: AppBar(title: Text(titles[_index])),
+      backgroundColor: onBubble ? AppTheme.bubble : AppTheme.cream,
+      appBar: AppBar(
+        title: Text(
+          _titles[_index],
+          style: TextStyle(color: onBubble ? Colors.white : AppTheme.ink),
+        ),
+      ),
       body: IndexedStack(
         index: _index,
         children: [
@@ -73,23 +87,108 @@ class _RootScaffoldState extends State<RootScaffold> {
           MapScreen(repository: widget.repository),
         ],
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.mic_rounded),
-            label: 'Enregistrer',
+      bottomNavigationBar: _PopNavBar(
+        index: _index,
+        tabs: _tabs,
+        onSelected: (i) => setState(() => _index = i),
+      ),
+    );
+  }
+}
+
+/// Barre de navigation "pop" : emojis chunky, onglet actif dans une pastille
+/// jaune contourée avec ombre dure.
+class _PopNavBar extends StatelessWidget {
+  const _PopNavBar({
+    required this.index,
+    required this.tabs,
+    required this.onSelected,
+  });
+
+  final int index;
+  final List<({String emoji, String label})> tabs;
+  final ValueChanged<int> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppTheme.paper,
+        border: Border(top: BorderSide(color: AppTheme.ink, width: 4)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              for (var i = 0; i < tabs.length; i++)
+                _NavItem(
+                  emoji: tabs[i].emoji,
+                  label: tabs[i].label,
+                  active: i == index,
+                  onTap: () => onSelected(i),
+                ),
+            ],
           ),
-          NavigationDestination(
-            icon: Icon(Icons.library_music_rounded),
-            label: 'Collection',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.map_rounded),
-            label: 'Carte',
-          ),
-        ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NavItem extends StatelessWidget {
+  const _NavItem({
+    required this.emoji,
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
+
+  final String emoji;
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+        padding: EdgeInsets.symmetric(
+          horizontal: active ? 16 : 12,
+          vertical: 8,
+        ),
+        decoration: active
+            ? AppTheme.stickerCard(color: AppTheme.zap, radius: 16, dx: 3, dy: 3)
+            : const BoxDecoration(),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              emoji,
+              style: TextStyle(
+                fontSize: 24,
+                color: active ? null : AppTheme.ink.withValues(alpha: 0.45),
+              ),
+            ),
+            if (active) ...[
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 13,
+                  color: AppTheme.ink,
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
