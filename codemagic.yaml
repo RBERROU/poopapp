@@ -1,10 +1,10 @@
 # Configuration Codemagic pour Just Fart (Flutter iOS -> TestFlight)
-# Build sur Mac cloud + signature AUTOMATIQUE (certificat + profil crees a la volee
-# via la cle API avec --create) + envoi TestFlight.
+# Signature via le bloc ios_signing : Codemagic MONTE le certificat de distribution
+# stocke dans "Code signing identities" + cree/recupere le profil via la cle API.
 #
-# PREREQUIS (UI Codemagic, une seule fois) :
-#  - Cle App Store Connect API (role App Manager, idealement Admin) ajoutee dans
-#    Settings > Integrations > Developer Portal, nommee EXACTEMENT "JustFart AppStore Key".
+# PREREQUIS (deja faits dans l'UI Codemagic) :
+#  - Cle App Store Connect (Admin) : integration Developer Portal "JustFart AppStore Key".
+#  - Certificat "Apple Distribution" genere dans Code signing identities.
 
 workflows:
   ios-testflight:
@@ -12,16 +12,18 @@ workflows:
     instance_type: mac_mini_m2
     max_build_duration: 60
 
-    # Rend la cle App Store Connect disponible aux outils de signature.
     integrations:
       app_store_connect: JustFart AppStore Key
 
     environment:
+      # Codemagic monte le certificat stocke qui correspond a ce type + bundle,
+      # et cree/recupere le profil de provisionnement via l'integration.
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.justfart.app
       flutter: stable
       xcode: latest
       cocoapods: default
-      vars:
-        BUNDLE_ID: "com.justfart.app"
 
     scripts:
       - name: Recuperer les packages Flutter
@@ -30,14 +32,8 @@ workflows:
       - name: Installer les pods iOS
         script: find . -name "Podfile" -execdir pod install \;
 
-      - name: Signature automatique (cree certificat + profil si absents)
-        script: |
-          keychain initialize
-          app-store-connect fetch-signing-files "$BUNDLE_ID" \
-            --type IOS_APP_STORE \
-            --create
-          keychain add-certificates
-          xcode-project use-profiles
+      - name: Appliquer la signature au projet Xcode
+        script: xcode-project use-profiles
 
       - name: Build IPA (release)
         script: |
