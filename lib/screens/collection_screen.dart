@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
+import '../models/fart_recording.dart';
 import '../services/player_service.dart';
 import '../state/recordings_repository.dart';
 import '../widgets/recording_tile.dart';
@@ -31,20 +32,28 @@ class _CollectionScreenState extends State<CollectionScreen> {
     super.dispose();
   }
 
-  Future<void> _play(String id, String path) async {
-    if (_playingId == id) {
+  Future<void> _play(FartRecording rec) async {
+    if (_playingId == rec.id) {
       await _player.stop();
       setState(() => _playingId = null);
     } else {
-      await _player.play(path);
-      setState(() => _playingId = id);
+      await _player.play(rec);
+      setState(() => _playingId = rec.id);
     }
   }
 
-  Future<void> _share(String path, String name) async {
+  Future<void> _share(FartRecording rec) async {
+    // Pet présent uniquement au cloud (pas de fichier local) : on partage
+    // le lien public plutôt que le fichier.
+    if (rec.filePath.isEmpty) {
+      final url = rec.audioUrl;
+      if (url == null) return;
+      await Share.share('${rec.name} — écouté sur Just Fart : $url');
+      return;
+    }
     await Share.shareXFiles(
-      [XFile(path)],
-      text: '$name — envoyé depuis Just Fart',
+      [XFile(rec.filePath)],
+      text: '${rec.name} — envoyé depuis Just Fart',
     );
   }
 
@@ -124,8 +133,8 @@ class _CollectionScreenState extends State<CollectionScreen> {
             return RecordingTile(
               recording: r,
               isPlaying: _playingId == r.id,
-              onPlay: () => _play(r.id, r.filePath),
-              onShare: () => _share(r.filePath, r.name),
+              onPlay: () => _play(r),
+              onShare: () => _share(r),
               onRename: () => _rename(r.id, r.name),
               onDelete: () => _confirmDelete(r.id),
             );

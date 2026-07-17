@@ -12,6 +12,10 @@ class FartRecording {
   final double? latitude;
   final double? longitude;
 
+  /// URL publique de l'audio dans Supabase Storage.
+  /// null tant que le pet n'a pas été synchronisé.
+  final String? audioUrl;
+
   FartRecording({
     required this.id,
     required this.name,
@@ -20,11 +24,13 @@ class FartRecording {
     required this.durationMs,
     this.latitude,
     this.longitude,
+    this.audioUrl,
   });
 
   bool get hasLocation => latitude != null && longitude != null;
+  bool get isSynced => audioUrl != null;
 
-  FartRecording copyWith({String? name}) => FartRecording(
+  FartRecording copyWith({String? name, String? audioUrl}) => FartRecording(
         id: id,
         name: name ?? this.name,
         filePath: filePath,
@@ -32,6 +38,7 @@ class FartRecording {
         durationMs: durationMs,
         latitude: latitude,
         longitude: longitude,
+        audioUrl: audioUrl ?? this.audioUrl,
       );
 
   Map<String, dynamic> toMap() => {
@@ -42,6 +49,7 @@ class FartRecording {
         'durationMs': durationMs,
         'latitude': latitude,
         'longitude': longitude,
+        'audioUrl': audioUrl,
       };
 
   factory FartRecording.fromMap(Map<String, dynamic> map) => FartRecording(
@@ -53,6 +61,24 @@ class FartRecording {
         // absentes des anciens enregistrements : null, pas de crash
         latitude: (map['latitude'] as num?)?.toDouble(),
         longitude: (map['longitude'] as num?)?.toDouble(),
+        audioUrl: map['audioUrl'] as String?,
+      );
+
+  /// Construit un pet depuis une ligne de la table `farts` de Supabase
+  /// (pet présent au serveur mais absent de cet appareil : pas de fichier local).
+  factory FartRecording.fromCloudRow(
+    Map<String, dynamic> row, {
+    required String audioUrl,
+  }) =>
+      FartRecording(
+        id: row['id'] as String,
+        name: row['name'] as String,
+        filePath: '',
+        createdAt: DateTime.parse(row['created_at'] as String).toLocal(),
+        durationMs: (row['duration_ms'] as num).toInt(),
+        latitude: (row['latitude'] as num?)?.toDouble(),
+        longitude: (row['longitude'] as num?)?.toDouble(),
+        audioUrl: audioUrl,
       );
 
   /// Sérialisation de la liste complète (pour SharedPreferences).

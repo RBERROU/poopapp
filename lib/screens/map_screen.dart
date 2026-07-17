@@ -44,7 +44,7 @@ class _MapScreenState extends State<MapScreen> {
             ),
             const SizedBox(height: 12),
             FilledButton.icon(
-              onPressed: () => _player.play(r.filePath),
+              onPressed: () => _player.play(r),
               icon: const Icon(Icons.play_arrow_rounded),
               label: const Text('Écouter'),
             ),

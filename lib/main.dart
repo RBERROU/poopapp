@@ -1,14 +1,32 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'config/supabase_config.dart';
 import 'screens/collection_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/map_screen.dart';
+import 'services/auth_service.dart';
+import 'services/cloud_service.dart';
 import 'services/storage_service.dart';
 import 'state/recordings_repository.dart';
 import 'theme/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final repository = RecordingsRepository(StorageService());
+
+  // Backend optionnel : si Supabase est injoignable, l'app reste 100 % locale.
+  CloudService? cloud;
+  try {
+    await Supabase.initialize(
+      url: SupabaseConfig.url,
+      publishableKey: SupabaseConfig.anonKey,
+    );
+    await AuthService().ensureSignedIn();
+    cloud = CloudService(Supabase.instance.client);
+  } catch (e) {
+    debugPrint('Supabase indisponible, mode local : $e');
+  }
+
+  final repository = RecordingsRepository(StorageService(), cloud);
   await repository.load();
   runApp(JustFartApp(repository: repository));
 }
