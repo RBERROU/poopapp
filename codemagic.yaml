@@ -1,0 +1,54 @@
+# Configuration Codemagic pour Just Fart (Flutter iOS -> TestFlight)
+# Build sur Mac cloud + signature automatique + envoi TestFlight.
+#
+# PREREQUIS (a faire dans l'UI, une seule fois) :
+#  1. Cle App Store Connect API generee (role App Manager).
+#  2. Dans Codemagic : integration "Developer Portal" connectee,
+#     avec la cle nommee EXACTEMENT "JustFart AppStore Key"
+#     (doit correspondre au nom ci-dessous sous integrations).
+
+workflows:
+  ios-testflight:
+    name: Just Fart iOS - TestFlight
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+
+    # Reference la cle App Store Connect ajoutee dans l'UI Codemagic.
+    integrations:
+      app_store_connect: JustFart AppStore Key
+
+    environment:
+      # Signature automatique : Codemagic genere/recupere les profils
+      # de distribution pour ce bundle ID via la cle API.
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.justfart.app
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+
+    scripts:
+      - name: Configurer la signature dans le projet Xcode
+        script: xcode-project use-profiles
+
+      - name: Recuperer les packages Flutter
+        script: flutter pub get
+
+      - name: Installer les pods iOS
+        script: find . -name "Podfile" -execdir pod install \;
+
+      - name: Build IPA (release)
+        script: |
+          flutter build ipa --release \
+            --build-number=$BUILD_NUMBER \
+            --export-options-plist=/Users/builder/export_options.plist
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+
+    publishing:
+      app_store_connect:
+        auth: integration
+        # Envoie automatiquement le build sur TestFlight apres upload.
+        submit_to_testflight: true
