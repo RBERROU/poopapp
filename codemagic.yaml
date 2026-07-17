@@ -1,11 +1,10 @@
 # Configuration Codemagic pour Just Fart (Flutter iOS -> TestFlight)
-# Build sur Mac cloud + signature automatique + envoi TestFlight.
+# Build sur Mac cloud + signature AUTOMATIQUE (certificat + profil crees a la volee
+# via la cle API avec --create) + envoi TestFlight.
 #
-# PREREQUIS (a faire dans l'UI, une seule fois) :
-#  1. Cle App Store Connect API generee (role App Manager).
-#  2. Dans Codemagic : integration "Developer Portal" connectee,
-#     avec la cle nommee EXACTEMENT "JustFart AppStore Key"
-#     (doit correspondre au nom ci-dessous sous integrations).
+# PREREQUIS (UI Codemagic, une seule fois) :
+#  - Cle App Store Connect API (role App Manager, idealement Admin) ajoutee dans
+#    Settings > Integrations > Developer Portal, nommee EXACTEMENT "JustFart AppStore Key".
 
 workflows:
   ios-testflight:
@@ -13,29 +12,32 @@ workflows:
     instance_type: mac_mini_m2
     max_build_duration: 60
 
-    # Reference la cle App Store Connect ajoutee dans l'UI Codemagic.
+    # Rend la cle App Store Connect disponible aux outils de signature.
     integrations:
       app_store_connect: JustFart AppStore Key
 
     environment:
-      # Signature automatique : Codemagic genere/recupere les profils
-      # de distribution pour ce bundle ID via la cle API.
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.justfart.app
       flutter: stable
       xcode: latest
       cocoapods: default
+      vars:
+        BUNDLE_ID: "com.justfart.app"
 
     scripts:
-      - name: Configurer la signature dans le projet Xcode
-        script: xcode-project use-profiles
-
       - name: Recuperer les packages Flutter
         script: flutter pub get
 
       - name: Installer les pods iOS
         script: find . -name "Podfile" -execdir pod install \;
+
+      - name: Signature automatique (cree certificat + profil si absents)
+        script: |
+          keychain initialize
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create
+          keychain add-certificates
+          xcode-project use-profiles
 
       - name: Build IPA (release)
         script: |
@@ -50,5 +52,4 @@ workflows:
     publishing:
       app_store_connect:
         auth: integration
-        # Envoie automatiquement le build sur TestFlight apres upload.
         submit_to_testflight: true
