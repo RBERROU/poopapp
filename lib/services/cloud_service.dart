@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/fart_recording.dart';
+import '../models/feed_item.dart';
 
 /// Accès au backend Supabase : upload des fichiers audio vers le bucket
 /// `farts` et métadonnées dans la table `farts`.
@@ -16,6 +17,9 @@ class CloudService {
   final SupabaseClient _client;
 
   static const _bucket = 'farts';
+
+  /// Emojis de réaction disponibles, dans l'ordre d'affichage.
+  static const reactionEmojis = ['💨', '🔥', '😂', '🤢'];
 
   String? get userId => _client.auth.currentUser?.id;
 
@@ -93,6 +97,135 @@ class CloudService {
       }
     } catch (e) {
       debugPrint('Suppression cloud ${rec.id} impossible : $e');
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Social : feed public, réactions, modération, pseudo.
+  // ---------------------------------------------------------------------------
+
+  /// Récupère le feed public (pets des autres), le plus récent d'abord.
+  /// Position floutée, utilisateurs bloqués et mes propres pets exclus côté SQL.
+  Future<List<FeedItem>> fetchFeed({int limit = 100}) async {
+    try {
+      final rows = await _client
+          .from('public_feed')
+          .select()
+          .order('created_at', ascending: false)
+          .limit(limit);
+      return [
+        for (final row in List<Map<String, dynamic>>.from(rows))
+          FeedItem.fromRow(
+            row,
+            audioUrl: publicUrlFor(row['audio_path'] as String),
+          ),
+      ];
+    } catch (e) {
+      debugPrint('Chargement du feed impossible : $e');
+      return [];
+    }
+  }
+
+  /// Emojis que l'utilisateur courant a posés sur ces pets : { fartId: {emoji} }.
+  Future<Map<String, Set<String>>> fetchMyReactions(
+      List<String> fartIds) async {
+    final uid = userId;
+    if (uid == null || fartIds.isEmpty) return {};
+    try {
+      final rows = await _client
+          .from('reactions')
+          .select('fart_id, emoji')
+          .eq('user_id', uid)
+          .inFilter('fart_id', fartIds);
+      final result = <String, Set<String>>{};
+      for (final row in List<Map<String, dynamic>>.from(rows)) {
+        (result[row['fart_id'] as String] ??= {}).add(row['emoji'] as String);
+      }
+      return result;
+    } catch (e) {
+      debugPrint('Chargement de mes réactions impossible : $e');
+      return {};
+    }
+  }
+
+  /// Ajoute ou retire une réaction. Renvoie true si elle est active après coup.
+  Future<bool> toggleReaction(String fartId, String emoji,
+      {required bool currentlyOn}) async {
+    final uid = userId;
+    if (uid == null) return currentlyOn;
+    try {
+      if (currentlyOn) {
+        await _client
+            .from('reactions')
+            .delete()
+            .eq('fart_id', fartId)
+            .eq('user_id', uid)
+            .eq('emoji', emoji);
+        return false;
+      } else {
+        await _client.from('reactions').insert({
+          'fart_id': fartId,
+          'user_id': uid,
+          'emoji': emoji,
+        });
+        return true;
+      }
+    } catch (e) {
+      debugPrint('Réaction impossible : $e');
+      return currentlyOn;
+    }
+  }
+
+  Future<void> reportFart(String fartId, {String? reason}) async {
+    final uid = userId;
+    if (uid == null) return;
+    try {
+      await _client.from('reports').insert({
+        'reporter_id': uid,
+        'fart_id': fartId,
+        'reason': reason,
+      });
+    } catch (e) {
+      debugPrint('Signalement impossible : $e');
+    }
+  }
+
+  Future<void> blockUser(String blockedId) async {
+    final uid = userId;
+    if (uid == null) return;
+    try {
+      await _client.from('blocks').insert({
+        'blocker_id': uid,
+        'blocked_id': blockedId,
+      });
+    } catch (e) {
+      debugPrint('Blocage impossible : $e');
+    }
+  }
+
+  Future<String?> fetchMyPseudo() async {
+    final uid = userId;
+    if (uid == null) return null;
+    try {
+      final row = await _client
+          .from('profiles')
+          .select('pseudo')
+          .eq('id', uid)
+          .maybeSingle();
+      return row?['pseudo'] as String?;
+    } catch (e) {
+      debugPrint('Lecture du pseudo impossible : $e');
+      return null;
+    }
+  }
+
+  Future<void> updatePseudo(String pseudo) async {
+    final uid = userId;
+    if (uid == null) return;
+    try {
+      await _client.from('profiles').update({'pseudo': pseudo}).eq('id', uid);
+    } catch (e) {
+      debugPrint('Mise à jour du pseudo impossible : $e');
     }
   }
 

@@ -2,22 +2,50 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart';
-import '../models/fart_recording.dart';
+import '../models/feed_item.dart';
+import '../services/cloud_service.dart';
 import '../services/player_service.dart';
 import '../state/recordings_repository.dart';
 import '../theme/app_theme.dart';
 
-/// Onglet "Carte" : affiche tous les pets géolocalisés sur une carte OpenStreetMap.
+/// Onglet "Carte" : le monde des pets géolocalisés.
+/// - Tes pets : position précise, pin rose 💨.
+/// - Les autres (feed public) : position FLOUTÉE au quartier, pin violet.
 class MapScreen extends StatefulWidget {
-  const MapScreen({super.key, required this.repository});
+  const MapScreen({super.key, required this.repository, this.cloud});
   final RecordingsRepository repository;
+  final CloudService? cloud;
 
   @override
   State<MapScreen> createState() => _MapScreenState();
 }
 
+/// Point unifié affiché sur la carte (mien ou public).
+class _Pin {
+  final LatLng point;
+  final String title;
+  final String subtitle;
+  final String audioUrl;
+  final bool mine;
+  const _Pin({
+    required this.point,
+    required this.title,
+    required this.subtitle,
+    required this.audioUrl,
+    required this.mine,
+  });
+}
+
 class _MapScreenState extends State<MapScreen> {
   final PlayerService _player = PlayerService();
+  List<FeedItem> _feed = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFeed();
+  }
 
   @override
   void dispose() {
@@ -25,7 +53,47 @@ class _MapScreenState extends State<MapScreen> {
     super.dispose();
   }
 
-  void _showDetails(FartRecording r) {
+  Future<void> _loadFeed() async {
+    final cloud = widget.cloud;
+    if (cloud != null) {
+      final feed = await cloud.fetchFeed();
+      if (mounted) setState(() => _feed = feed);
+    }
+    if (mounted) setState(() => _loading = false);
+  }
+
+  List<_Pin> _collectPins() {
+    final pins = <_Pin>[];
+    // Mes pets, position précise.
+    for (final r in widget.repository.items) {
+      if (r.hasLocation) {
+        final url = r.audioUrl;
+        pins.add(_Pin(
+          point: LatLng(r.latitude!, r.longitude!),
+          title: r.name,
+          subtitle:
+              '${DateFormat('dd/MM · HH:mm').format(r.createdAt)} · ${r.durationLabel}',
+          audioUrl: url ?? r.filePath,
+          mine: true,
+        ));
+      }
+    }
+    // Pets des autres, position floutée.
+    for (final f in _feed) {
+      if (f.hasLocation) {
+        pins.add(_Pin(
+          point: LatLng(f.latFuzzy!, f.lngFuzzy!),
+          title: f.name,
+          subtitle: '${f.pseudo} · ${f.durationLabel}',
+          audioUrl: f.audioUrl,
+          mine: false,
+        ));
+      }
+    }
+    return pins;
+  }
+
+  void _showDetails(_Pin pin) {
     showModalBottomSheet(
       context: context,
       backgroundColor: AppTheme.paper,
@@ -39,47 +107,34 @@ class _MapScreenState extends State<MapScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              r.name,
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w900,
-                color: AppTheme.ink,
-              ),
-            ),
+            Text(pin.title,
+                style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                    color: AppTheme.ink)),
             const SizedBox(height: 4),
-            Text(
-              '${DateFormat('dd/MM/yy · HH:mm').format(r.createdAt)} · ${r.durationLabel}',
-              style: TextStyle(
-                color: AppTheme.ink.withValues(alpha: 0.6),
-                fontWeight: FontWeight.w700,
-              ),
-            ),
+            Text(pin.subtitle,
+                style: TextStyle(
+                    color: AppTheme.ink.withValues(alpha: 0.6),
+                    fontWeight: FontWeight.w700)),
             const SizedBox(height: 16),
             GestureDetector(
-              onTap: () => _player.play(r),
+              onTap: () => _player.playUrl(pin.audioUrl),
               child: Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
                 decoration: AppTheme.stickerCard(
-                  color: AppTheme.bubble,
-                  radius: 999,
-                  dx: 3,
-                  dy: 3,
-                ),
+                    color: AppTheme.bubble, radius: 999, dx: 3, dy: 3),
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(Icons.play_arrow_rounded, color: Colors.white),
                     SizedBox(width: 6),
-                    Text(
-                      'Écouter',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 15,
-                      ),
-                    ),
+                    Text('Écouter',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 15)),
                   ],
                 ),
               ),
@@ -95,9 +150,14 @@ class _MapScreenState extends State<MapScreen> {
     return ListenableBuilder(
       listenable: widget.repository,
       builder: (context, _) {
-        final located =
-            widget.repository.items.where((r) => r.hasLocation).toList();
-        if (located.isEmpty) {
+        final pins = _collectPins();
+
+        if (_loading && pins.isEmpty) {
+          return const Center(
+            child: CircularProgressIndicator(color: AppTheme.bubble),
+          );
+        }
+        if (pins.isEmpty) {
           return Center(
             child: Padding(
               padding: const EdgeInsets.all(32),
@@ -106,23 +166,19 @@ class _MapScreenState extends State<MapScreen> {
                 children: [
                   const Text('🗺️', style: TextStyle(fontSize: 64)),
                   const SizedBox(height: 16),
-                  const Text(
-                    'Aucun pet géolocalisé',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w900,
-                      color: AppTheme.ink,
-                    ),
-                  ),
+                  const Text('Carte vide pour l\'instant',
+                      style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
+                          color: AppTheme.ink)),
                   const SizedBox(height: 8),
                   Text(
-                    'Autorise la localisation lors\ndu prochain enregistrement !',
+                    'Enregistre un pet en autorisant\nla localisation pour démarrer !',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: AppTheme.ink.withValues(alpha: 0.6),
-                    ),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.ink.withValues(alpha: 0.6)),
                   ),
                 ],
               ),
@@ -130,13 +186,11 @@ class _MapScreenState extends State<MapScreen> {
           );
         }
 
-        final points =
-            located.map((r) => LatLng(r.latitude!, r.longitude!)).toList();
-
+        final points = pins.map((p) => p.point).toList();
         return FlutterMap(
           options: MapOptions(
             initialCenter: points.first,
-            initialZoom: 14,
+            initialZoom: 12,
             initialCameraFit: points.length > 1
                 ? CameraFit.bounds(
                     bounds: LatLngBounds.fromPoints(points),
@@ -150,36 +204,33 @@ class _MapScreenState extends State<MapScreen> {
               userAgentPackageName: 'com.justfart.app',
             ),
             MarkerLayer(
-              markers: located
-                  .map(
-                    (r) => Marker(
-                      point: LatLng(r.latitude!, r.longitude!),
-                      width: 46,
-                      height: 46,
-                      child: GestureDetector(
-                        onTap: () => _showDetails(r),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: AppTheme.bubble,
-                            border:
-                                Border.all(color: AppTheme.ink, width: 3),
-                            boxShadow: const [
-                              BoxShadow(
+              markers: [
+                for (final pin in pins)
+                  Marker(
+                    point: pin.point,
+                    width: 46,
+                    height: 46,
+                    child: GestureDetector(
+                      onTap: () => _showDetails(pin),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: pin.mine ? AppTheme.bubble : AppTheme.grape,
+                          border: Border.all(color: AppTheme.ink, width: 3),
+                          boxShadow: const [
+                            BoxShadow(
                                 color: AppTheme.ink,
                                 offset: Offset(2, 2),
-                                blurRadius: 0,
-                              ),
-                            ],
-                          ),
-                          child: const Center(
-                            child: Text('💨', style: TextStyle(fontSize: 20)),
-                          ),
+                                blurRadius: 0),
+                          ],
+                        ),
+                        child: const Center(
+                          child: Text('💨', style: TextStyle(fontSize: 20)),
                         ),
                       ),
                     ),
-                  )
-                  .toList(),
+                  ),
+              ],
             ),
           ],
         );

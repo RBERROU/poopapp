@@ -17,6 +17,12 @@ class PlayerService {
     await _player.play(_sourceFor(rec));
   }
 
+  /// Lecture directe d'une URL distante (pets du feed public).
+  Future<void> playUrl(String url) async {
+    await _player.stop();
+    await _player.play(UrlSource(url));
+  }
+
   Source _sourceFor(FartRecording rec) {
     if (!kIsWeb &&
         rec.filePath.isNotEmpty &&

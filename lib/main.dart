@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'config/supabase_config.dart';
 import 'screens/collection_screen.dart';
+import 'screens/feed_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/map_screen.dart';
 import 'services/auth_service.dart';
@@ -9,6 +10,7 @@ import 'services/cloud_service.dart';
 import 'services/storage_service.dart';
 import 'state/recordings_repository.dart';
 import 'theme/app_theme.dart';
+import 'widgets/pseudo_dialog.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -28,12 +30,13 @@ Future<void> main() async {
 
   final repository = RecordingsRepository(StorageService(), cloud);
   await repository.load();
-  runApp(JustFartApp(repository: repository));
+  runApp(JustFartApp(repository: repository, cloud: cloud));
 }
 
 class JustFartApp extends StatelessWidget {
-  const JustFartApp({super.key, required this.repository});
+  const JustFartApp({super.key, required this.repository, this.cloud});
   final RecordingsRepository repository;
+  final CloudService? cloud;
 
   @override
   Widget build(BuildContext context) {
@@ -41,7 +44,7 @@ class JustFartApp extends StatelessWidget {
       title: 'Just Fart',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.theme,
-      home: RootScaffold(repository: repository),
+      home: RootScaffold(repository: repository, cloud: cloud),
     );
   }
 }
@@ -50,8 +53,9 @@ class JustFartApp extends StatelessWidget {
 /// IndexedStack garde les deux écrans vivants (un enregistrement en cours
 /// n'est pas perdu si on change d'onglet).
 class RootScaffold extends StatefulWidget {
-  const RootScaffold({super.key, required this.repository});
+  const RootScaffold({super.key, required this.repository, this.cloud});
   final RecordingsRepository repository;
+  final CloudService? cloud;
 
   @override
   State<RootScaffold> createState() => _RootScaffoldState();
@@ -60,31 +64,55 @@ class RootScaffold extends StatefulWidget {
 class _RootScaffoldState extends State<RootScaffold> {
   int _index = 0;
 
-  static const _titles = ['Just Fart', 'Ma collection', 'Carte'];
+  static const _titles = ['Just Fart', 'Le monde', 'Ma collection', 'Carte'];
   static const _tabs = [
     (emoji: '🎙️', label: 'Enregistrer'),
+    (emoji: '🌍', label: 'Le monde'),
     (emoji: '💿', label: 'Collection'),
     (emoji: '🗺️', label: 'Carte'),
   ];
+
+  Future<void> _editPseudo() async {
+    final cloud = widget.cloud;
+    if (cloud == null) return;
+    final current = await cloud.fetchMyPseudo();
+    if (!mounted) return;
+    final next = await showPseudoDialog(context, current: current ?? '');
+    if (next != null && next.isNotEmpty) {
+      await cloud.updatePseudo(next);
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text('Pseudo : $next 🎉')));
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     // Onglet 0 (Enregistrer) : fond rose plein, texte blanc.
     final onBubble = _index == 0;
+    final fg = onBubble ? Colors.white : AppTheme.ink;
     return Scaffold(
       backgroundColor: onBubble ? AppTheme.bubble : AppTheme.cream,
       appBar: AppBar(
-        title: Text(
-          _titles[_index],
-          style: TextStyle(color: onBubble ? Colors.white : AppTheme.ink),
-        ),
+        title: Text(_titles[_index], style: TextStyle(color: fg)),
+        actions: [
+          if (widget.cloud != null)
+            IconButton(
+              tooltip: 'Mon pseudo',
+              onPressed: _editPseudo,
+              icon: Icon(Icons.account_circle_rounded, color: fg),
+            ),
+        ],
       ),
       body: IndexedStack(
         index: _index,
         children: [
           HomeScreen(repository: widget.repository),
+          FeedScreen(cloud: widget.cloud),
           CollectionScreen(repository: widget.repository),
-          MapScreen(repository: widget.repository),
+          MapScreen(repository: widget.repository, cloud: widget.cloud),
         ],
       ),
       bottomNavigationBar: _PopNavBar(
