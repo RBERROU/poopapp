@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:maplibre/maplibre.dart';
 import '../models/social.dart';
 import '../services/cloud_service.dart';
 import '../services/player_service.dart';
 import '../theme/app_theme.dart';
 
 /// Onglet "Carte" : les pets géolocalisés de ta communauté (tes conversations),
-/// position floutée au quartier. Style funky (fond sombre + pins pop).
+/// position floutée au quartier. Rendu vectoriel MapLibre, style pastel + 3D
+/// (dans l'esprit Snapchat), sans clé API.
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key, this.cloud});
   final CloudService? cloud;
@@ -17,6 +17,9 @@ class MapScreen extends StatefulWidget {
 }
 
 class MapScreenState extends State<MapScreen> {
+  // Style vectoriel gratuit et coloré (OpenFreeMap, aucune clé).
+  static const _styleUrl = 'https://tiles.openfreemap.org/styles/liberty';
+
   final PlayerService _player = PlayerService();
   List<Post> _located = [];
   bool _loading = true;
@@ -33,10 +36,10 @@ class MapScreenState extends State<MapScreen> {
     super.dispose();
   }
 
-  /// Arrondit au quartier (~1 km) pour ne jamais afficher la position exacte.
-  LatLng _fuzz(double lat, double lng) => LatLng(
-        (lat * 100).round() / 100,
-        (lng * 100).round() / 100,
+  /// Arrondit au quartier (~1 km) : jamais la position exacte.
+  Geographic _fuzz(double lat, double lng) => Geographic(
+        lon: (lng * 100).round() / 100,
+        lat: (lat * 100).round() / 100,
       );
 
   Future<void> load() async {
@@ -111,8 +114,46 @@ class MapScreenState extends State<MapScreen> {
       return const Center(
           child: CircularProgressIndicator(color: AppTheme.bubble));
     }
-    if (_located.isEmpty) {
-      return Center(
+    if (_located.isEmpty) return _empty();
+
+    // Point flouté par pet + centre = moyenne (approx.) pour cadrer.
+    final pins = [
+      for (final p in _located) (post: p, pt: _fuzz(p.latitude!, p.longitude!)),
+    ];
+    final avgLon =
+        pins.map((e) => e.pt.lon).reduce((a, b) => a + b) / pins.length;
+    final avgLat =
+        pins.map((e) => e.pt.lat).reduce((a, b) => a + b) / pins.length;
+
+    return MapLibreMap(
+      options: MapOptions(
+        initStyle: _styleUrl,
+        initCenter: Geographic(lon: avgLon, lat: avgLat),
+        initZoom: 12,
+        initPitch: 45, // inclinaison "3D" façon Snap Map
+        maxPitch: 60,
+      ),
+      children: [
+        WidgetLayer(
+          allowInteraction: true,
+          markers: [
+            for (final pin in pins)
+              Marker(
+                point: pin.pt,
+                size: const Size(58, 66),
+                alignment: Alignment.bottomCenter,
+                child: GestureDetector(
+                  onTap: () => _showDetails(pin.post),
+                  child: _PopPin(pseudo: pin.post.senderPseudo),
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _empty() => Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
           child: Column(
@@ -138,51 +179,6 @@ class MapScreenState extends State<MapScreen> {
           ),
         ),
       );
-    }
-
-    // Point flouté par pet.
-    final pins = [
-      for (final p in _located)
-        (post: p, point: _fuzz(p.latitude!, p.longitude!)),
-    ];
-    final points = [for (final pin in pins) pin.point];
-
-    return FlutterMap(
-      options: MapOptions(
-        initialCenter: points.first,
-        initialZoom: 12,
-        initialCameraFit: points.length > 1
-            ? CameraFit.bounds(
-                bounds: LatLngBounds.fromPoints(points),
-                padding: const EdgeInsets.all(56),
-              )
-            : null,
-      ),
-      children: [
-        TileLayer(
-          // Fond sombre "funky" (CARTO Dark Matter, sans clé API).
-          urlTemplate:
-              'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-          userAgentPackageName: 'com.justfart.app',
-          retinaMode: RetinaMode.isHighDensity(context),
-        ),
-        MarkerLayer(
-          markers: [
-            for (final pin in pins)
-              Marker(
-                point: pin.point,
-                width: 54,
-                height: 62,
-                child: GestureDetector(
-                  onTap: () => _showDetails(pin.post),
-                  child: _PopPin(pseudo: pin.post.senderPseudo),
-                ),
-              ),
-          ],
-        ),
-      ],
-    );
-  }
 }
 
 /// Pin funky : bulle colorée avec initiale + petit pseudo dessous.

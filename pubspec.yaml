@@ -20,8 +20,7 @@ dependencies:
   geolocator: ^14.0.2     # géolocalisation (natif + web via geolocator_web)
   supabase_flutter: ^2.9.0  # backend : auth anonyme, base Postgres, stockage audio
   http: ^1.2.0            # lecture des blobs web pour l'upload
-  flutter_map: ^8.3.1     # carte OpenStreetMap, sans clé API
-  latlong2: ^0.10.1       # type LatLng utilisé par flutter_map
+  maplibre: ^0.3.5        # carte vectorielle (style Snapchat), sans clé API
 
 dev_dependencies:
   flutter_test:
@@ -32,6 +31,9 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  # Requis par maplibre pour la gestion des dépendances natives iOS.
+  config:
+    enable-swift-package-manager: true
 
 # Icône de l'app (candy-pop, générée via tool/make_icon.py).
 flutter_launcher_icons:
