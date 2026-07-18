@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import '../models/fart_recording.dart';
+import '../models/social.dart';
 import '../services/cloud_service.dart';
 import '../services/player_service.dart';
 import '../state/recordings_repository.dart';
 import '../theme/app_theme.dart';
 import '../widgets/recording_tile.dart';
-import '../widgets/send_to_friend_sheet.dart';
 
 /// Onglet "Collection" : liste, lecture, envoi privé, partage, renommage, suppression.
 class CollectionScreen extends StatefulWidget {
@@ -46,15 +46,68 @@ class _CollectionScreenState extends State<CollectionScreen> {
     }
   }
 
-  Future<void> _sendToFriend(FartRecording rec) async {
+  Future<void> _sendToConversation(FartRecording rec) async {
     final cloud = widget.cloud;
     if (cloud == null) return;
-    await showSendToFriendSheet(
-      context,
-      cloud: cloud,
-      recording: rec,
-      onResult: _snack,
+    if (!rec.isSynced) {
+      _snack('Ce pet se synchronise encore… réessaie dans un instant.');
+      return;
+    }
+    final convs = await cloud.fetchConversations();
+    if (!mounted) return;
+    if (convs.isEmpty) {
+      _snack('Crée une conversation d\'abord (onglet 💬) !');
+      return;
+    }
+    final chosen = await showModalBottomSheet<ConversationSummary>(
+      context: context,
+      backgroundColor: AppTheme.paper,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        side: BorderSide(color: AppTheme.ink, width: AppTheme.stroke),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 18, 20, 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Envoyer dans…',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 18,
+                        color: AppTheme.ink)),
+              ),
+            ),
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                children: [
+                  for (final c in convs)
+                    ListTile(
+                      leading: Text(c.isGroup ? '👥' : '👤',
+                          style: const TextStyle(fontSize: 22)),
+                      title: Text(c.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w800)),
+                      trailing: const Icon(Icons.send_rounded,
+                          color: AppTheme.bubble),
+                      onTap: () => Navigator.pop(ctx, c),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
     );
+    if (chosen == null) return;
+    final ok = await cloud.postFart(chosen.id, rec);
+    _snack(ok ? 'Envoyé dans ${chosen.title} ! 💨' : 'Échec de l\'envoi.');
   }
 
   void _snack(String msg) {
@@ -178,7 +231,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
               onPlay: () => _play(r),
               onShare: () => _share(r),
               onSendToFriend:
-                  widget.cloud == null ? null : () => _sendToFriend(r),
+                  widget.cloud == null ? null : () => _sendToConversation(r),
               onRename: () => _rename(r.id, r.name),
               onDelete: () => _confirmDelete(r.id),
             );

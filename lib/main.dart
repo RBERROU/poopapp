@@ -2,10 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'config/supabase_config.dart';
 import 'screens/collection_screen.dart';
-import 'screens/feed_screen.dart';
+import 'screens/conversations_screen.dart';
 import 'screens/friends_screen.dart';
 import 'screens/home_screen.dart';
-import 'screens/inbox_screen.dart';
 import 'screens/map_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'services/auth_service.dart';
@@ -97,21 +96,21 @@ class RootScaffold extends StatefulWidget {
 
 class _RootScaffoldState extends State<RootScaffold> {
   int _index = 0;
-  int _unseen = 0;
-  final _inboxKey = GlobalKey<InboxScreenState>();
+  int _unread = 0;
+  final _conversationsKey = GlobalKey<ConversationsScreenState>();
+  final _mapKey = GlobalKey<MapScreenState>();
 
-  static const _inboxIndex = 2;
+  static const _conversationsIndex = 1;
+  static const _mapIndex = 3;
   static const _titles = [
     'Just Fart',
-    'Le monde',
-    'Reçus',
+    'Conversations',
     'Ma collection',
     'Carte',
   ];
   static const _tabs = [
     (emoji: '🎙️', label: 'Enregistrer'),
-    (emoji: '🌍', label: 'Le monde'),
-    (emoji: '📬', label: 'Reçus'),
+    (emoji: '💬', label: 'Conversations'),
     (emoji: '💿', label: 'Collection'),
     (emoji: '🗺️', label: 'Carte'),
   ];
@@ -119,22 +118,21 @@ class _RootScaffoldState extends State<RootScaffold> {
   @override
   void initState() {
     super.initState();
-    _refreshUnseen();
+    _refreshUnread();
   }
 
-  Future<void> _refreshUnseen() async {
+  Future<void> _refreshUnread() async {
     final cloud = widget.cloud;
     if (cloud == null) return;
-    final n = await cloud.countUnseen();
-    if (mounted) setState(() => _unseen = n);
+    final n = await cloud.countUnreadTotal();
+    if (mounted) setState(() => _unread = n);
   }
 
   void _onSelect(int i) {
     setState(() => _index = i);
-    if (i == _inboxIndex) {
-      _inboxKey.currentState?.load();
-    }
-    _refreshUnseen();
+    if (i == _conversationsIndex) _conversationsKey.currentState?.load();
+    if (i == _mapIndex) _mapKey.currentState?.load();
+    _refreshUnread();
   }
 
   Future<void> _openProfile() async {
@@ -143,7 +141,7 @@ class _RootScaffoldState extends State<RootScaffold> {
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => FriendsScreen(cloud: cloud)),
     );
-    _refreshUnseen();
+    _refreshUnread();
   }
 
   @override
@@ -168,22 +166,22 @@ class _RootScaffoldState extends State<RootScaffold> {
         index: _index,
         children: [
           HomeScreen(repository: widget.repository),
-          FeedScreen(cloud: widget.cloud),
-          InboxScreen(
-            key: _inboxKey,
+          ConversationsScreen(
+            key: _conversationsKey,
             cloud: widget.cloud,
-            onChanged: _refreshUnseen,
+            repository: widget.repository,
+            onChanged: _refreshUnread,
           ),
           CollectionScreen(
               repository: widget.repository, cloud: widget.cloud),
-          MapScreen(repository: widget.repository, cloud: widget.cloud),
+          MapScreen(key: _mapKey, cloud: widget.cloud),
         ],
       ),
       bottomNavigationBar: _PopNavBar(
         index: _index,
         tabs: _tabs,
-        badgeIndex: _inboxIndex,
-        badgeCount: _unseen,
+        badgeIndex: _conversationsIndex,
+        badgeCount: _unread,
         onSelected: _onSelect,
       ),
     );

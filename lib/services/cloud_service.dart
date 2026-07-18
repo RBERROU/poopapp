@@ -6,13 +6,13 @@ import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/fart_recording.dart';
-import '../models/feed_item.dart';
 import '../models/social.dart';
 
-/// Accès au backend Supabase : upload des fichiers audio vers le bucket
-/// `farts` et métadonnées dans la table `farts`.
-/// Toutes les méthodes échouent en silence (log + null/no-op) : le cloud
-/// est une couche de synchronisation, jamais un point de blocage de l'app.
+/// Accès au backend Supabase.
+/// - Sauvegarde perso : bucket audio + table `farts` (privée au propriétaire).
+/// - Social communautaire : amis, conversations (fils privés / groupes), posts.
+/// Toutes les méthodes échouent en silence (log + null/no-op) : le cloud ne
+/// bloque jamais l'app, qui reste utilisable en local.
 class CloudService {
   CloudService(this._client);
   final SupabaseClient _client;
@@ -35,24 +35,23 @@ class CloudService {
     return Uri.decodeComponent(url.substring(i + marker.length));
   }
 
-  /// Upload l'audio + la ligne de métadonnées. Renvoie l'URL publique,
-  /// ou null si l'upload a échoué (offline, fichier disparu…).
+  // ---------------------------------------------------------------------------
+  // Collection perso (backup cloud).
+  // ---------------------------------------------------------------------------
+
+  /// Upload l'audio + la ligne de métadonnées. Renvoie l'URL publique, ou null.
   Future<String?> uploadFart(FartRecording rec) async {
     final uid = userId;
     if (uid == null) return null;
     try {
       final data = await _readAudio(rec.filePath);
       if (data == null) return null;
-
       final ext = data.extension;
       final storagePath = '$uid/${rec.id}.$ext';
       await _client.storage.from(_bucket).uploadBinary(
             storagePath,
             data.bytes,
-            fileOptions: FileOptions(
-              contentType: data.contentType,
-              upsert: true,
-            ),
+            fileOptions: FileOptions(contentType: data.contentType, upsert: true),
           );
       await _client.from('farts').upsert({
         'id': rec.id,
@@ -72,7 +71,6 @@ class CloudService {
     }
   }
 
-  /// Tous les pets de l'utilisateur courant (les plus récents d'abord).
   Future<List<Map<String, dynamic>>> fetchMyFarts() async {
     final uid = userId;
     if (uid == null) return [];
@@ -98,9 +96,7 @@ class CloudService {
       final url = rec.audioUrl;
       if (url != null) {
         final path = storagePathFromUrl(url);
-        if (path != null) {
-          await _client.storage.from(_bucket).remove([path]);
-        }
+        if (path != null) await _client.storage.from(_bucket).remove([path]);
       }
     } catch (e) {
       debugPrint('Suppression cloud ${rec.id} impossible : $e');
@@ -108,139 +104,9 @@ class CloudService {
   }
 
   // ---------------------------------------------------------------------------
-  // Social : feed public, réactions, modération, pseudo.
+  // Profil & amis.
   // ---------------------------------------------------------------------------
 
-  /// Récupère le feed public (pets des autres), le plus récent d'abord.
-  /// Position floutée, utilisateurs bloqués et mes propres pets exclus côté SQL.
-  Future<List<FeedItem>> fetchFeed({int limit = 100}) async {
-    try {
-      final rows = await _client
-          .from('public_feed')
-          .select()
-          .order('created_at', ascending: false)
-          .limit(limit);
-      return [
-        for (final row in List<Map<String, dynamic>>.from(rows))
-          FeedItem.fromRow(
-            row,
-            audioUrl: publicUrlFor(row['audio_path'] as String),
-          ),
-      ];
-    } catch (e) {
-      debugPrint('Chargement du feed impossible : $e');
-      return [];
-    }
-  }
-
-  /// Emojis que l'utilisateur courant a posés sur ces pets : { fartId: {emoji} }.
-  Future<Map<String, Set<String>>> fetchMyReactions(
-      List<String> fartIds) async {
-    final uid = userId;
-    if (uid == null || fartIds.isEmpty) return {};
-    try {
-      final rows = await _client
-          .from('reactions')
-          .select('fart_id, emoji')
-          .eq('user_id', uid)
-          .inFilter('fart_id', fartIds);
-      final result = <String, Set<String>>{};
-      for (final row in List<Map<String, dynamic>>.from(rows)) {
-        (result[row['fart_id'] as String] ??= {}).add(row['emoji'] as String);
-      }
-      return result;
-    } catch (e) {
-      debugPrint('Chargement de mes réactions impossible : $e');
-      return {};
-    }
-  }
-
-  /// Ajoute ou retire une réaction. Renvoie true si elle est active après coup.
-  Future<bool> toggleReaction(String fartId, String emoji,
-      {required bool currentlyOn}) async {
-    final uid = userId;
-    if (uid == null) return currentlyOn;
-    try {
-      if (currentlyOn) {
-        await _client
-            .from('reactions')
-            .delete()
-            .eq('fart_id', fartId)
-            .eq('user_id', uid)
-            .eq('emoji', emoji);
-        return false;
-      } else {
-        await _client.from('reactions').insert({
-          'fart_id': fartId,
-          'user_id': uid,
-          'emoji': emoji,
-        });
-        return true;
-      }
-    } catch (e) {
-      debugPrint('Réaction impossible : $e');
-      return currentlyOn;
-    }
-  }
-
-  Future<void> reportFart(String fartId, {String? reason}) async {
-    final uid = userId;
-    if (uid == null) return;
-    try {
-      await _client.from('reports').insert({
-        'reporter_id': uid,
-        'fart_id': fartId,
-        'reason': reason,
-      });
-    } catch (e) {
-      debugPrint('Signalement impossible : $e');
-    }
-  }
-
-  Future<void> blockUser(String blockedId) async {
-    final uid = userId;
-    if (uid == null) return;
-    try {
-      await _client.from('blocks').insert({
-        'blocker_id': uid,
-        'blocked_id': blockedId,
-      });
-    } catch (e) {
-      debugPrint('Blocage impossible : $e');
-    }
-  }
-
-  Future<String?> fetchMyPseudo() async {
-    final uid = userId;
-    if (uid == null) return null;
-    try {
-      final row = await _client
-          .from('profiles')
-          .select('pseudo')
-          .eq('id', uid)
-          .maybeSingle();
-      return row?['pseudo'] as String?;
-    } catch (e) {
-      debugPrint('Lecture du pseudo impossible : $e');
-      return null;
-    }
-  }
-
-  Future<void> updatePseudo(String pseudo) async {
-    final uid = userId;
-    if (uid == null) return;
-    try {
-      await _client.from('profiles').update({'pseudo': pseudo}).eq('id', uid);
-    } catch (e) {
-      debugPrint('Mise à jour du pseudo impossible : $e');
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Amis : code, demandes, liste.
-  // ---------------------------------------------------------------------------
-
-  /// Mon profil : { pseudo, friend_code }.
   Future<({String pseudo, String code})?> fetchMyProfile() async {
     final uid = userId;
     if (uid == null) return null;
@@ -261,7 +127,16 @@ class CloudService {
     }
   }
 
-  /// Cherche un utilisateur par son code ami. Renvoie (id, pseudo) ou null.
+  Future<void> updatePseudo(String pseudo) async {
+    final uid = userId;
+    if (uid == null) return;
+    try {
+      await _client.from('profiles').update({'pseudo': pseudo}).eq('id', uid);
+    } catch (e) {
+      debugPrint('Mise à jour du pseudo impossible : $e');
+    }
+  }
+
   Future<({String id, String pseudo})?> findByCode(String code) async {
     try {
       final row = await _client
@@ -277,7 +152,6 @@ class CloudService {
     }
   }
 
-  /// Envoie une demande d'ami. Renvoie un message d'état pour l'UI.
   Future<String> sendFriendRequest(String targetId) async {
     final uid = userId;
     if (uid == null) return 'Connexion requise.';
@@ -289,7 +163,6 @@ class CloudService {
       });
       return 'Demande envoyée ! 🤝';
     } on PostgrestException catch (e) {
-      // 23505 = doublon (relation déjà existante dans ce sens).
       if (e.code == '23505') return 'Demande déjà envoyée.';
       debugPrint('Demande d\'ami impossible : $e');
       return 'Impossible d\'envoyer la demande.';
@@ -299,7 +172,6 @@ class CloudService {
     }
   }
 
-  /// Demandes d'amis reçues (en attente).
   Future<List<FriendRequest>> fetchIncomingRequests() async {
     final uid = userId;
     if (uid == null) return [];
@@ -340,7 +212,6 @@ class CloudService {
     }
   }
 
-  /// Liste des amis acceptés (dans les deux sens).
   Future<List<Friend>> fetchFriends() async {
     final uid = userId;
     if (uid == null) return [];
@@ -370,10 +241,11 @@ class CloudService {
 
   Future<Map<String, String>> _pseudosFor(List<String> ids) async {
     if (ids.isEmpty) return {};
+    final unique = ids.toSet().toList();
     final rows = await _client
         .from('profiles')
         .select('id, pseudo')
-        .inFilter('id', ids);
+        .inFilter('id', unique);
     return {
       for (final r in List<Map<String, dynamic>>.from(rows))
         r['id'] as String: (r['pseudo'] as String?) ?? 'Péteur anonyme',
@@ -381,95 +253,200 @@ class CloudService {
   }
 
   // ---------------------------------------------------------------------------
-  // Envois privés (DM) + boîte de réception.
+  // Conversations (fils privés / groupes) & posts.
   // ---------------------------------------------------------------------------
 
-  /// Envoie un pet en privé à un ami. Renvoie true si envoyé.
-  Future<bool> sendFartToFriend(String recipientId, FartRecording rec) async {
-    final uid = userId;
-    if (uid == null) return false;
-    final url = rec.audioUrl;
-    final path = url == null ? null : storagePathFromUrl(url);
-    if (path == null) return false; // pas encore synchronisé sur le cloud
+  Future<List<ConversationSummary>> fetchConversations() async {
+    if (userId == null) return [];
     try {
-      await _client.from('direct_sends').insert({
-        'sender_id': uid,
-        'recipient_id': recipientId,
-        'fart_id': rec.id,
-        'name': rec.name,
-        'duration_ms': rec.durationMs,
-        'audio_path': path,
-      });
-      return true;
+      final rows = await _client.rpc('my_conversations');
+      return [
+        for (final r in List<Map<String, dynamic>>.from(rows))
+          ConversationSummary.fromRow(r),
+      ];
     } catch (e) {
-      debugPrint('Envoi privé impossible : $e');
-      return false;
+      debugPrint('Chargement des conversations impossible : $e');
+      return [];
     }
   }
 
-  /// Pets reçus (les plus récents d'abord).
-  Future<List<InboxItem>> fetchInbox() async {
+  Future<int> countUnreadTotal() async {
+    final convs = await fetchConversations();
+    return convs.fold<int>(0, (a, c) => a + c.unread);
+  }
+
+  /// Ouvre (ou crée) le fil direct avec un ami. Renvoie l'id de conversation.
+  Future<String?> openDirect(String friendId) async {
+    try {
+      final res =
+          await _client.rpc('get_or_create_direct', params: {'other': friendId});
+      return res as String?;
+    } catch (e) {
+      debugPrint('Ouverture du fil direct impossible : $e');
+      return null;
+    }
+  }
+
+  /// Crée un groupe et y ajoute les amis choisis. Renvoie l'id, ou null.
+  Future<String?> createGroup(String name, List<String> friendIds) async {
     final uid = userId;
-    if (uid == null) return [];
+    if (uid == null) return null;
+    try {
+      final conv = await _client
+          .from('conversations')
+          .insert({'kind': 'group', 'name': name, 'created_by': uid})
+          .select('id')
+          .single();
+      final convId = conv['id'] as String;
+      // Je me joins d'abord (requis par la policy avant d'ajouter des amis).
+      await _client
+          .from('conversation_members')
+          .insert({'conversation_id': convId, 'user_id': uid});
+      if (friendIds.isNotEmpty) {
+        await _client.from('conversation_members').insert([
+          for (final fid in friendIds)
+            {'conversation_id': convId, 'user_id': fid},
+        ]);
+      }
+      return convId;
+    } catch (e) {
+      debugPrint('Création de groupe impossible : $e');
+      return null;
+    }
+  }
+
+  Future<List<Post>> fetchPosts(String conversationId) async {
+    final uid = userId;
     try {
       final rows = await _client
-          .from('direct_sends')
+          .from('posts')
           .select()
-          .eq('recipient_id', uid)
-          .order('created_at', ascending: false);
+          .eq('conversation_id', conversationId)
+          .order('created_at', ascending: true);
       final list = List<Map<String, dynamic>>.from(rows);
+      if (list.isEmpty) return [];
+
       final pseudos =
           await _pseudosFor([for (final r in list) r['sender_id'] as String]);
+      final postIds = [for (final r in list) r['id'] as String];
+      final reactionRows = await _client
+          .from('post_reactions')
+          .select('post_id, user_id, emoji')
+          .inFilter('post_id', postIds);
+
+      final counts = <String, Map<String, int>>{};
+      final mine = <String, Set<String>>{};
+      for (final r in List<Map<String, dynamic>>.from(reactionRows)) {
+        final pid = r['post_id'] as String;
+        final emoji = r['emoji'] as String;
+        (counts[pid] ??= {})[emoji] = ((counts[pid]![emoji]) ?? 0) + 1;
+        if (r['user_id'] == uid) (mine[pid] ??= {}).add(emoji);
+      }
+
       return [
         for (final r in list)
-          InboxItem(
+          Post(
             id: r['id'] as String,
             senderId: r['sender_id'] as String,
             senderPseudo: pseudos[r['sender_id']] ?? 'Péteur anonyme',
             name: r['name'] as String,
             durationMs: (r['duration_ms'] as num).toInt(),
             audioUrl: publicUrlFor(r['audio_path'] as String),
+            latitude: (r['latitude'] as num?)?.toDouble(),
+            longitude: (r['longitude'] as num?)?.toDouble(),
             createdAt: DateTime.parse(r['created_at'] as String).toLocal(),
-            seen: r['seen_at'] != null,
+            reactions: counts[r['id']] ?? {},
+            myReactions: mine[r['id']] ?? {},
           ),
       ];
     } catch (e) {
-      debugPrint('Chargement de la boîte de réception impossible : $e');
+      debugPrint('Chargement des posts impossible : $e');
       return [];
     }
   }
 
-  /// Nombre de pets reçus non lus (pour le badge de nav).
-  Future<int> countUnseen() async {
+  /// Partage un pet dans une conversation. Renvoie true si posté.
+  Future<bool> postFart(String conversationId, FartRecording rec) async {
     final uid = userId;
-    if (uid == null) return 0;
+    if (uid == null) return false;
+    final url = rec.audioUrl;
+    final path = url == null ? null : storagePathFromUrl(url);
+    if (path == null) return false; // pas encore synchronisé
     try {
-      final rows = await _client
-          .from('direct_sends')
-          .select('id')
-          .eq('recipient_id', uid)
-          .isFilter('seen_at', null);
-      return List.from(rows).length;
+      await _client.from('posts').insert({
+        'conversation_id': conversationId,
+        'sender_id': uid,
+        'fart_id': rec.id,
+        'name': rec.name,
+        'duration_ms': rec.durationMs,
+        'audio_path': path,
+        'latitude': rec.latitude,
+        'longitude': rec.longitude,
+      });
+      return true;
     } catch (e) {
-      debugPrint('Comptage des non-lus impossible : $e');
-      return 0;
+      debugPrint('Partage du pet impossible : $e');
+      return false;
     }
   }
 
-  Future<void> markSeen(String sendId) async {
+  Future<void> reactToPost(String postId, String emoji,
+      {required bool currentlyOn}) async {
+    final uid = userId;
+    if (uid == null) return;
+    try {
+      if (currentlyOn) {
+        await _client
+            .from('post_reactions')
+            .delete()
+            .eq('post_id', postId)
+            .eq('user_id', uid)
+            .eq('emoji', emoji);
+      } else {
+        await _client.from('post_reactions').insert({
+          'post_id': postId,
+          'user_id': uid,
+          'emoji': emoji,
+        });
+      }
+    } catch (e) {
+      debugPrint('Réaction impossible : $e');
+    }
+  }
+
+  Future<void> markConversationRead(String conversationId) async {
+    final uid = userId;
+    if (uid == null) return;
     try {
       await _client
-          .from('direct_sends')
-          .update({'seen_at': DateTime.now().toUtc().toIso8601String()})
-          .eq('id', sendId);
+          .from('conversation_members')
+          .update({'last_read_at': DateTime.now().toUtc().toIso8601String()})
+          .eq('conversation_id', conversationId)
+          .eq('user_id', uid);
     } catch (e) {
       debugPrint('Marquage lu impossible : $e');
     }
   }
 
-  /// Lit les octets de l'audio. Natif : fichier disque (toujours du m4a).
-  /// Web : fetch de la blob URL, format déterminé par le navigateur
-  /// (webm sur Chrome, mp4 sur Safari).
+  /// Tous les posts géolocalisés de mes conversations (pour la carte).
+  Future<List<Post>> fetchCommunityLocated() async {
+    try {
+      final convs = await fetchConversations();
+      final result = <Post>[];
+      for (final c in convs) {
+        final posts = await fetchPosts(c.id);
+        result.addAll(posts.where((p) => p.hasLocation));
+      }
+      return result;
+    } catch (e) {
+      debugPrint('Chargement carte communauté impossible : $e');
+      return [];
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Lecture des octets audio (natif : fichier ; web : blob URL).
+  // ---------------------------------------------------------------------------
   Future<({Uint8List bytes, String contentType, String extension})?>
       _readAudio(String path) async {
     if (path.isEmpty) return null;

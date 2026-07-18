@@ -1,50 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart';
-import '../models/feed_item.dart';
+import '../models/social.dart';
 import '../services/cloud_service.dart';
 import '../services/player_service.dart';
-import '../state/recordings_repository.dart';
 import '../theme/app_theme.dart';
 
-/// Onglet "Carte" : le monde des pets géolocalisés.
-/// - Tes pets : position précise, pin rose 💨.
-/// - Les autres (feed public) : position FLOUTÉE au quartier, pin violet.
+/// Onglet "Carte" : les pets géolocalisés de ta communauté (tes conversations),
+/// position floutée au quartier. Style funky (fond sombre + pins pop).
 class MapScreen extends StatefulWidget {
-  const MapScreen({super.key, required this.repository, this.cloud});
-  final RecordingsRepository repository;
+  const MapScreen({super.key, this.cloud});
   final CloudService? cloud;
 
   @override
-  State<MapScreen> createState() => _MapScreenState();
+  State<MapScreen> createState() => MapScreenState();
 }
 
-/// Point unifié affiché sur la carte (mien ou public).
-class _Pin {
-  final LatLng point;
-  final String title;
-  final String subtitle;
-  final String audioUrl;
-  final bool mine;
-  const _Pin({
-    required this.point,
-    required this.title,
-    required this.subtitle,
-    required this.audioUrl,
-    required this.mine,
-  });
-}
-
-class _MapScreenState extends State<MapScreen> {
+class MapScreenState extends State<MapScreen> {
   final PlayerService _player = PlayerService();
-  List<FeedItem> _feed = [];
+  List<Post> _located = [];
   bool _loading = true;
 
   @override
   void initState() {
     super.initState();
-    _loadFeed();
+    load();
   }
 
   @override
@@ -53,47 +33,27 @@ class _MapScreenState extends State<MapScreen> {
     super.dispose();
   }
 
-  Future<void> _loadFeed() async {
+  /// Arrondit au quartier (~1 km) pour ne jamais afficher la position exacte.
+  LatLng _fuzz(double lat, double lng) => LatLng(
+        (lat * 100).round() / 100,
+        (lng * 100).round() / 100,
+      );
+
+  Future<void> load() async {
     final cloud = widget.cloud;
-    if (cloud != null) {
-      final feed = await cloud.fetchFeed();
-      if (mounted) setState(() => _feed = feed);
+    if (cloud == null) {
+      if (mounted) setState(() => _loading = false);
+      return;
     }
-    if (mounted) setState(() => _loading = false);
+    final posts = await cloud.fetchCommunityLocated();
+    if (!mounted) return;
+    setState(() {
+      _located = posts;
+      _loading = false;
+    });
   }
 
-  List<_Pin> _collectPins() {
-    final pins = <_Pin>[];
-    // Mes pets, position précise.
-    for (final r in widget.repository.items) {
-      if (r.hasLocation) {
-        final url = r.audioUrl;
-        pins.add(_Pin(
-          point: LatLng(r.latitude!, r.longitude!),
-          title: r.name,
-          subtitle:
-              '${DateFormat('dd/MM · HH:mm').format(r.createdAt)} · ${r.durationLabel}',
-          audioUrl: url ?? r.filePath,
-          mine: true,
-        ));
-      }
-    }
-    // Pets des autres, position floutée.
-    for (final f in _feed) {
-      if (f.hasLocation) {
-        pins.add(_Pin(
-          point: LatLng(f.latFuzzy!, f.lngFuzzy!),
-          title: f.name,
-          subtitle: '${f.pseudo} · ${f.durationLabel}',
-          audioUrl: f.audioUrl,
-          mine: false,
-        ));
-      }
-    }
-    return pins;
-  }
-
-  void _showDetails(_Pin pin) {
+  void _showDetails(Post p) {
     showModalBottomSheet(
       context: context,
       backgroundColor: AppTheme.paper,
@@ -107,19 +67,19 @@ class _MapScreenState extends State<MapScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(pin.title,
+            Text(p.name,
                 style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w900,
                     color: AppTheme.ink)),
             const SizedBox(height: 4),
-            Text(pin.subtitle,
+            Text('de ${p.senderPseudo} · ${p.durationLabel}',
                 style: TextStyle(
                     color: AppTheme.ink.withValues(alpha: 0.6),
                     fontWeight: FontWeight.w700)),
             const SizedBox(height: 16),
             GestureDetector(
-              onTap: () => _player.playUrl(pin.audioUrl),
+              onTap: () => _player.playUrl(p.audioUrl),
               child: Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
@@ -147,94 +107,131 @@ class _MapScreenState extends State<MapScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: widget.repository,
-      builder: (context, _) {
-        final pins = _collectPins();
-
-        if (_loading && pins.isEmpty) {
-          return const Center(
-            child: CircularProgressIndicator(color: AppTheme.bubble),
-          );
-        }
-        if (pins.isEmpty) {
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('🗺️', style: TextStyle(fontSize: 64)),
-                  const SizedBox(height: 16),
-                  const Text('Carte vide pour l\'instant',
-                      style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w900,
-                          color: AppTheme.ink)),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Enregistre un pet en autorisant\nla localisation pour démarrer !',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: AppTheme.ink.withValues(alpha: 0.6)),
-                  ),
-                ],
+    if (_loading) {
+      return const Center(
+          child: CircularProgressIndicator(color: AppTheme.bubble));
+    }
+    if (_located.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('🗺️', style: TextStyle(fontSize: 64)),
+              const SizedBox(height: 16),
+              const Text('Carte vide',
+                  style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                      color: AppTheme.ink)),
+              const SizedBox(height: 8),
+              Text(
+                'Les pets géolocalisés de tes potes\napparaîtront ici (position au quartier).',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.ink.withValues(alpha: 0.6)),
               ),
-            ),
-          );
-        }
-
-        final points = pins.map((p) => p.point).toList();
-        return FlutterMap(
-          options: MapOptions(
-            initialCenter: points.first,
-            initialZoom: 12,
-            initialCameraFit: points.length > 1
-                ? CameraFit.bounds(
-                    bounds: LatLngBounds.fromPoints(points),
-                    padding: const EdgeInsets.all(48),
-                  )
-                : null,
+            ],
           ),
-          children: [
-            TileLayer(
-              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-              userAgentPackageName: 'com.justfart.app',
-            ),
-            MarkerLayer(
-              markers: [
-                for (final pin in pins)
-                  Marker(
-                    point: pin.point,
-                    width: 46,
-                    height: 46,
-                    child: GestureDetector(
-                      onTap: () => _showDetails(pin),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: pin.mine ? AppTheme.bubble : AppTheme.grape,
-                          border: Border.all(color: AppTheme.ink, width: 3),
-                          boxShadow: const [
-                            BoxShadow(
-                                color: AppTheme.ink,
-                                offset: Offset(2, 2),
-                                blurRadius: 0),
-                          ],
-                        ),
-                        child: const Center(
-                          child: Text('💨', style: TextStyle(fontSize: 20)),
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
+        ),
+      );
+    }
+
+    // Point flouté par pet.
+    final pins = [
+      for (final p in _located)
+        (post: p, point: _fuzz(p.latitude!, p.longitude!)),
+    ];
+    final points = [for (final pin in pins) pin.point];
+
+    return FlutterMap(
+      options: MapOptions(
+        initialCenter: points.first,
+        initialZoom: 12,
+        initialCameraFit: points.length > 1
+            ? CameraFit.bounds(
+                bounds: LatLngBounds.fromPoints(points),
+                padding: const EdgeInsets.all(56),
+              )
+            : null,
+      ),
+      children: [
+        TileLayer(
+          // Fond sombre "funky" (CARTO Dark Matter, sans clé API).
+          urlTemplate:
+              'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+          userAgentPackageName: 'com.justfart.app',
+          retinaMode: RetinaMode.isHighDensity(context),
+        ),
+        MarkerLayer(
+          markers: [
+            for (final pin in pins)
+              Marker(
+                point: pin.point,
+                width: 54,
+                height: 62,
+                child: GestureDetector(
+                  onTap: () => _showDetails(pin.post),
+                  child: _PopPin(pseudo: pin.post.senderPseudo),
+                ),
+              ),
           ],
-        );
-      },
+        ),
+      ],
+    );
+  }
+}
+
+/// Pin funky : bulle colorée avec initiale + petit pseudo dessous.
+class _PopPin extends StatelessWidget {
+  const _PopPin({required this.pseudo});
+  final String pseudo;
+
+  @override
+  Widget build(BuildContext context) {
+    final initial =
+        pseudo.isNotEmpty ? pseudo.characters.first.toUpperCase() : '?';
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 40,
+          height: 40,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: AppTheme.bubble,
+            border: Border.all(color: AppTheme.ink, width: 3),
+            boxShadow: const [
+              BoxShadow(color: AppTheme.ink, offset: Offset(2, 2), blurRadius: 0),
+            ],
+          ),
+          child: Text(initial,
+              style: const TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 18,
+                  color: Colors.white)),
+        ),
+        const SizedBox(height: 2),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+          decoration: BoxDecoration(
+            color: AppTheme.zap,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: AppTheme.ink, width: 1.5),
+          ),
+          child: Text(
+            pseudo.length > 8 ? '${pseudo.substring(0, 7)}…' : pseudo,
+            style: const TextStyle(
+                fontWeight: FontWeight.w900,
+                fontSize: 9,
+                color: AppTheme.ink),
+          ),
+        ),
+      ],
     );
   }
 }
